@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Slicer & Exporter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Inter', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        
+        /* Custom Color Picker Styling */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            padding: 0;
+            width: 100%;
+            height: 32px;
+            cursor: pointer;
+            background: none;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: 1px solid #475569;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Container -->
+    <div class="absolute top-4 left-4 z-20 w-80 flex flex-col items-start pointer-events-none">
+        
+        <!-- Main Panel -->
+        <div id="controls-panel" class="bg-gray-900/90 backdrop-blur-md rounded-xl shadow-2xl border border-gray-800 pointer-events-auto overflow-hidden transition-all duration-300 w-full">
+            
+            <!-- Header -->
+            <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V4.1</h1>
+                </div>
+                <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div id="panel-content" class="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
+                
+                <!-- View Mode -->
+                <div class="bg-black/40 p-1 rounded-lg flex shadow-inner border border-gray-800">
+                    <button id="btn-3d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md">3D View</button>
+                    <button id="btn-2d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800">2D Ortho</button>
+                </div>
+
+                <!-- Slice Control -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold uppercase text-gray-500">Z-Height</label>
+                        <span id="slice-val" class="text-xs font-mono text-blue-400 bg-blue-900/20 px-2 py-0.5 rounded border border-blue-900/30">0.00</span>
+                    </div>
+                    <input type="range" id="slice-slider" min="-1" max="1" step="0.01" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400">
+                </div>
+
+                <!-- Automation -->
+                <div class="bg-black/20 rounded-lg p-3 border border-gray-800 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold uppercase text-gray-400">Auto Scan</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="anim-toggle" class="sr-only peer" checked>
+                            <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold uppercase text-gray-500 mb-1 block">Speed</label>
+                        <input type="range" id="speed-slider" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    </div>
+                </div>
+
+                <!-- Export Video Section -->
+                <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700 space-y-3">
+                    <div class="flex justify-between items-center">
+                         <label class="text-xs font-bold uppercase text-red-400 flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                            Export Video (MP4)
+                        </label>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">Duration (s)</label>
+                            <input type="number" id="export-duration" value="5" min="1" max="60" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">FPS</label>
+                            <select id="export-fps" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
+                                <option value="30">30</option>
+                                <option value="60" selected>60</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Resolution (px)</label>
+                        <div class="flex gap-2">
+                             <input type="number" id="export-w" value="1080" placeholder="W" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                             <span class="text-gray-500 self-center">x</span>
+                             <input type="number" id="export-h" value="1080" placeholder="H" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                        </div>
+                    </div>
+                    
+                    <!-- Zoom & Frame Control -->
+                    <div class="space-y-2 pt-1 border-t border-gray-700">
+                        <div class="flex items-center justify-between">
+                             <label class="text-[10px] text-gray-500 uppercase font-bold">Frame Scale</label>
+                             <span id="zoom-val" class="text-[10px] text-blue-400 font-mono">1.0x</span>
+                        </div>
+                        <!-- Range 0.2 (Tight) to 2.0 (Wide) -->
+                        <input type="range" id="zoom-slider" min="0.2" max="2.0" step="0.1" value="1.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        
+                         <label class="flex items-center gap-2 cursor-pointer mt-1">
+                            <input type="checkbox" id="show-frame" class="w-3 h-3 accent-red-500 rounded bg-gray-700 border-gray-600">
+                            <span class="text-[10px] text-gray-400 uppercase font-bold select-none">Show Capture Frame</span>
+                        </label>
+                    </div>
+
+                    <button id="btn-export" class="w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
+                        <span>Offline Render (MP4)</span>
+                    </button>
+                </div>
+
+                <!-- Appearance -->
+                <div>
+                     <label class="text-xs font-bold uppercase text-gray-500 mb-2 block">Fill Color</label>
+                     <div class="flex flex-col gap-2">
+                        <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
+                            <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
+                        </div>
+                        <span class="text-[10px] text-gray-500 text-right">Click to change color</span>
+                     </div>
+                </div>
+
+                <hr class="border-gray-800">
+
+                <!-- Upload -->
+                <div>
+                    <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
+                        <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Custom .GLB</span>
+                        <input type="file" id="file-input" accept=".glb, .gltf" class="hidden"/>
+                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">Click to browse files</span>
+                    </label>
+                </div>
+                
+                 <!-- Status -->
+                 <div id="loading-status" class="text-xs text-amber-400 font-mono hidden flex items-center gap-2">
+                    <svg class="animate-spin h-3 w-3 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recording Overlay with Progress -->
+    <div id="rec-overlay" class="hidden absolute top-4 right-4 z-30 w-64 bg-gray-900/95 border border-gray-700 p-4 rounded-xl shadow-2xl backdrop-blur">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-red-400 animate-pulse">Rendering...</span>
+            <span id="rec-percentage" class="text-xs font-mono text-white">0%</span>
+        </div>
+        <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+            <div id="rec-progress-bar" class="bg-red-500 h-1.5 rounded-full" style="width: 0%"></div>
+        </div>
+        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering.</p>
+    </div>
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container" class="cursor-move"></div>
+
+    <script>
+        // --- CONSTANTS ---
+        const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
+        const FRUSTUM_SIZE = 3.0; 
+
+        // --- VARIABLES ---
+        let scene, renderer, controls;
+        let perspectiveCamera, orthoCamera, activeCamera;
+        let visualGroup, stencilGroup, capGroup;
+        let clippingPlane;
+        let capMesh;
+        let frameHelper; 
+        let isAnimate = true;
+        let scanSpeed = 0.5;
+        let time = 0;
+        let modelBounds = { min: -1, max: 1 };
+        let viewMode = '3d';
+        let capMaterial, backMat, frontMat;
+        let isPanelOpen = true;
+
+        // Export State
+        let isProcessingVideo = false;
+        let captureScale = 1.0; 
+        let preExportState = { width: 0, height: 0 };
+
+        // --- INIT ---
+        function init() {
+            const container = document.getElementById('canvas-container');
+            const aspect = window.innerWidth / window.innerHeight;
+
+            // 1. Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000); 
+
+            // 2. Cameras
+            perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
+            perspectiveCamera.position.set(3, 2, 4);
+
+            const fH = FRUSTUM_SIZE;
+            const fW = fH * aspect;
+            orthoCamera = new THREE.OrthographicCamera(-fW / 2, fW / 2, fH / 2, -fH / 2, 0.1, 100);
+            orthoCamera.position.set(0, 10, 0); 
+            orthoCamera.lookAt(0, 0, 0);
+
+            activeCamera = perspectiveCamera;
+
+            // 3. Renderer
+            // NOTE: preserveDrawingBuffer is essential for capture
+            renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.localClippingEnabled = true; 
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // 4. Controls
+            controls = new THREE.OrbitControls(activeCamera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // 5. Lights
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+            dl.position.set(5, 10, 7);
+            dl.castShadow = true;
+            scene.add(dl);
+            
+            const rimLight = new THREE.DirectionalLight(0x4444ff, 0.5);
+            rimLight.position.set(-5, 5, -5);
+            scene.add(rimLight);
+
+            // 6. Clipping Plane
+            clippingPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+
+            // 7. Initialize Groups
+            visualGroup = new THREE.Group();
+            stencilGroup = new THREE.Group();
+            capGroup = new THREE.Group();
+            
+            scene.add(stencilGroup); 
+            scene.add(visualGroup);
+            scene.add(capGroup);
+
+            // 8. Capture Frame Helper
+            const frameGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)); 
+            const frameMat = new THREE.LineBasicMaterial({ color: 0xff0000, depthTest: false, depthWrite: false });
+            frameHelper = new THREE.LineSegments(frameGeo, frameMat);
+            frameHelper.rotation.x = -Math.PI / 2; 
+            frameHelper.visible = false; 
+            scene.add(frameHelper);
+
+            // 9. Materials for Stencil Logic
+            const baseStencil = new THREE.MeshBasicMaterial({
+                depthWrite: false,
+                depthTest: false,
+                colorWrite: false,
+                stencilWrite: true,
+                stencilFunc: THREE.AlwaysStencilFunc,
+                side: THREE.BackSide, 
+                clippingPlanes: [clippingPlane]
+            });
+
+            backMat = baseStencil.clone();
+            backMat.stencilFail = THREE.IncrementWrapStencilOp;
+            backMat.stencilZFail = THREE.IncrementWrapStencilOp;
+            backMat.stencilZPass = THREE.IncrementWrapStencilOp;
+
+            frontMat = baseStencil.clone();
+            frontMat.side = THREE.FrontSide;
+            frontMat.stencilFail = THREE.DecrementWrapStencilOp;
+            frontMat.stencilZFail = THREE.DecrementWrapStencilOp;
+            frontMat.stencilZPass = THREE.DecrementWrapStencilOp;
+
+            // 10. Cap Material (Fill)
+            capMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff, 
+                metalness: 0.1,
+                roughness: 0.1,
+                stencilWrite: true,
+                stencilRef: 0,
+                stencilFunc: THREE.NotEqualStencilFunc,
+                stencilFail: THREE.KeepStencilOp,
+                stencilZFail: THREE.KeepStencilOp,
+                stencilZPass: THREE.KeepStencilOp,
+                side: THREE.DoubleSide
+            });
+
+            // 11. Cap Mesh
+            const planeGeom = new THREE.PlaneGeometry(100, 100);
+            capMesh = new THREE.Mesh(planeGeom, capMaterial);
+            capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
+            capMesh.renderOrder = 1;
+            capGroup.add(capMesh);
+
+            // 12. Load
+            loadModel(DEFAULT_MODEL);
+
+            // 13. Events
+            window.addEventListener('resize', onWindowResize);
+            setupUI();
+            animate();
+        }
+
+        function loadModel(url) {
+            const loader = new THREE.GLTFLoader();
+            const status = document.getElementById('loading-status');
+            status.classList.remove('hidden');
+
+            loader.load(url, (gltf) => {
+                while(visualGroup.children.length > 0) visualGroup.remove(visualGroup.children[0]);
+                while(stencilGroup.children.length > 0) stencilGroup.remove(stencilGroup.children[0]);
+
+                const root = gltf.scene;
+                
+                // Centering
+                const box = new THREE.Box3().setFromObject(root);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+
+                root.position.x = -center.x;
+                root.position.y = -center.y;
+                root.position.z = -center.z;
+                
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 2 / maxDim;
+                root.scale.set(scale, scale, scale);
+                root.updateMatrixWorld(true);
+
+                // Clone for Stencil
+                const stencilBackRoot = root.clone();
+                const stencilFrontRoot = root.clone();
+
+                root.traverse((o) => {
+                    if (o.isMesh) {
+                        o.material.clippingPlanes = [clippingPlane];
+                        o.material.clipShadows = true;
+                        o.material.side = THREE.DoubleSide;
+                        o.castShadow = true;
+                        o.receiveShadow = true;
+                    }
+                });
+
+                stencilBackRoot.traverse((o) => {
+                    if (o.isMesh) {
+                        o.material = backMat;
+                        o.material.clippingPlanes = [clippingPlane];
+                    }
+                });
+
+                stencilFrontRoot.traverse((o) => {
+                    if (o.isMesh) {
+                        o.material = frontMat;
+                        o.material.clippingPlanes = [clippingPlane];
+                    }
+                });
+
+                visualGroup.add(root);
+                stencilGroup.add(stencilBackRoot);
+                stencilGroup.add(stencilFrontRoot);
+
+                // Bounds
+                const buffer = 0.05; 
+                const limit = ((size.y * scale) / 2) + buffer;
+                modelBounds.min = -limit;
+                modelBounds.max = limit;
+                
+                const slider = document.getElementById('slice-slider');
+                slider.min = -limit;
+                slider.max = limit;
+
+                status.classList.add('hidden');
+
+                if (viewMode === '2d') {
+                    visualGroup.visible = false;
+                }
+
+                updateFrameHelper(); 
+
+            }, undefined, (e) => {
+                console.error(e);
+                status.textContent = "Error loading model";
+            });
+        }
+
+        // --- HELPER LOGIC ---
+        function updateFrameHelper() {
+            if (!frameHelper) return;
+
+            const w = parseInt(document.getElementById('export-w').value) || 1080;
+            const h = parseInt(document.getElementById('export-h').value) || 1080;
+            const aspect = w / h;
+            
+            const visHeight = FRUSTUM_SIZE * captureScale;
+            const visWidth = visHeight * aspect;
+
+            frameHelper.scale.set(visWidth, visHeight, 1);
+            
+            frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value) || 0;
+            frameHelper.visible = document.getElementById('show-frame').checked;
+        }
+
+        // --- ANIMATION ---
+        function animate() {
+            if (!isProcessingVideo) {
+                requestAnimationFrame(animate);
+                
+                // Standard Playback
+                if (isAnimate && visualGroup.children.length > 0) {
+                    time += 0.01 * scanSpeed;
+                    const t = (time % 2);
+                    const alpha = t < 1 ? t : 2 - t; 
+                    const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, alpha);
+                    updatePlaneHeight(yPos);
+                    document.getElementById('slice-slider').value = yPos;
+                }
+                
+                if(frameHelper.visible) {
+                    frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value);
+                }
+
+                controls.update();
+                renderer.render(scene, activeCamera);
+            }
+        }
+
+        // --- OFFLINE RENDERING LOGIC ---
+        async function startExport() {
+            if (isProcessingVideo) return;
+            
+            // Check Support
+            if (typeof VideoEncoder === 'undefined') {
+                alert("Your browser does not support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16+.");
+                return;
+            }
+
+            isProcessingVideo = true;
+
+            // 1. Dynamic Import of MP4 Muxer (CDN)
+            // We use a library to containerize the raw encoded frames into an MP4 file
+            const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
+
+            const w = parseInt(document.getElementById('export-w').value) || 1080;
+            const h = parseInt(document.getElementById('export-h').value) || 1080;
+            // Ensure even dimensions for encorders
+            const width = w % 2 === 0 ? w : w - 1;
+            const height = h % 2 === 0 ? h : h - 1;
+            
+            const dur = parseInt(document.getElementById('export-duration').value) || 5;
+            const fps = parseInt(document.getElementById('export-fps').value) || 60;
+            const bitrate = 10_000_000; // 10 Mbps High Quality
+
+            // 2. Pause & Save State
+            preExportState.width = window.innerWidth;
+            preExportState.height = window.innerHeight;
+            isAnimate = false;
+            document.getElementById('anim-toggle').checked = false;
+            
+            const wasFrameVisible = frameHelper.visible;
+            frameHelper.visible = false; 
+
+            // 3. Setup Recording UI
+            document.getElementById('rec-overlay').classList.remove('hidden');
+            const percentEl = document.getElementById('rec-percentage');
+            const barEl = document.getElementById('rec-progress-bar');
+
+            // 4. Setup Renderer
+            renderer.setSize(width, height);
+            
+            // 5. Setup Camera (Ortho)
+            activeCamera = orthoCamera;
+            const aspect = width / height;
+            const fH = FRUSTUM_SIZE * captureScale;
+            const fW = fH * aspect;
+            orthoCamera.left = -fW / 2;
+            orthoCamera.right = fW / 2;
+            orthoCamera.top = fH / 2;
+            orthoCamera.bottom = -fH / 2;
+            orthoCamera.zoom = 1; 
+            orthoCamera.updateProjectionMatrix();
+            orthoCamera.position.set(0, 10, 0); 
+            orthoCamera.lookAt(0, 0, 0);
+            
+            visualGroup.visible = false; // Hide 3D mesh, show slice only
+
+            // 6. Init Muxer
+            const muxer = new Muxer({
+                target: new ArrayBufferTarget(),
+                video: {
+                    codec: 'avc', // H.264
+                    width: width,
+                    height: height
+                },
+                fastStart: 'in-memory' // Optimize for web playback
+            });
+
+            // 7. Init Encoder
+            const videoEncoder = new VideoEncoder({
+                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                error: e => {
+                    console.error("Encoding error:", e);
+                    isProcessingVideo = false; // Stop processing on error
+                }
+            });
+
+            // Use Main Profile, Level 4.2 (avc1.4d002a) to support up to 1080p/60fps
+            videoEncoder.configure({
+                codec: 'avc1.4d002a', 
+                width: width,
+                height: height,
+                bitrate: bitrate,
+                framerate: fps
+            });
+
+            // 8. RENDER LOOP
+            const totalFrames = fps * dur;
+            const frameDurationUs = 1e6 / fps; // Microseconds
+
+            for (let i = 0; i <= totalFrames; i++) {
+                if (!isProcessingVideo || videoEncoder.state === 'closed') break; // Safety check
+
+                // Update Model
+                const progress = i / totalFrames;
+                const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
+                updatePlaneHeight(yPos);
+                
+                // Draw
+                renderer.render(scene, activeCamera);
+                
+                // Create VideoFrame from Canvas
+                // Timestamp MUST be accurate for the file to have constant FPS
+                const timestamp = i * frameDurationUs;
+                const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
+                
+                // Encode
+                // keyFrame every 60 frames (approx 1s) for seekability
+                videoEncoder.encode(frame, { keyFrame: i % 60 === 0 });
+                frame.close(); // Important: release memory immediately
+
+                // Update UI
+                const pct = Math.round(progress * 100) + '%';
+                percentEl.textContent = pct;
+                barEl.style.width = pct;
+
+                // Yield to browser to keep UI responsive
+                await new Promise(r => setTimeout(r, 0));
+            }
+
+            // 9. Finalize
+            await videoEncoder.flush();
+            muxer.finalize();
+
+            const { buffer } = muxer.target; 
+            const blob = new Blob([buffer], { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `slice_render_${width}x${height}_${fps}fps.mp4`;
+            a.click();
+
+            // 10. Restore
+            restoreState(wasFrameVisible);
+            isProcessingVideo = false;
+            animate();
+        }
+
+        function restoreState(restoreFrame) {
+            renderer.setSize(preExportState.width, preExportState.height);
+            onWindowResize(); 
+            
+            document.getElementById('rec-overlay').classList.add('hidden');
+            if(frameHelper) frameHelper.visible = restoreFrame;
+            
+            if (viewMode === '3d') setMode('3d');
+            else setMode('2d');
+        }
+
+        function updatePlaneHeight(val) {
+            const v = parseFloat(val);
+            clippingPlane.constant = v;
+            capMesh.position.y = v;
+            if(!isProcessingVideo) {
+                document.getElementById('slice-val').textContent = v.toFixed(2);
+                document.getElementById('slice-slider').value = v;
+            }
+        }
+
+        function setupUI() {
+            document.getElementById('slice-slider').addEventListener('input', (e) => {
+                isAnimate = false;
+                document.getElementById('anim-toggle').checked = false;
+                updatePlaneHeight(e.target.value);
+            });
+            document.getElementById('anim-toggle').addEventListener('change', (e) => isAnimate = e.target.checked);
+            document.getElementById('speed-slider').addEventListener('input', (e) => scanSpeed = parseFloat(e.target.value));
+            document.getElementById('btn-3d').addEventListener('click', () => setMode('3d'));
+            document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
+            
+            document.getElementById('btn-export').addEventListener('click', startExport);
+            
+            document.getElementById('zoom-slider').addEventListener('input', (e) => {
+                captureScale = parseFloat(e.target.value);
+                document.getElementById('zoom-val').textContent = captureScale.toFixed(1) + 'x';
+                document.getElementById('show-frame').checked = true;
+                updateFrameHelper();
+            });
+            
+            document.getElementById('show-frame').addEventListener('change', updateFrameHelper);
+            document.getElementById('export-w').addEventListener('input', updateFrameHelper);
+            document.getElementById('export-h').addEventListener('input', updateFrameHelper);
+
+            document.getElementById('file-input').addEventListener('change', (e) => {
+                if(e.target.files[0]) loadModel(URL.createObjectURL(e.target.files[0]));
+            });
+        }
+
+        function setMode(mode) {
+            viewMode = mode;
+            const b3 = document.getElementById('btn-3d');
+            const b2 = document.getElementById('btn-2d');
+
+            if (mode === '3d') {
+                b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
+                b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
+                
+                activeCamera = perspectiveCamera;
+                
+                activeCamera.position.set(3, 2, 4);
+                activeCamera.lookAt(0,0,0);
+                
+                controls.object = activeCamera;
+                controls.enabled = true;
+                controls.enableRotate = true;
+                controls.enableZoom = true;
+                
+                visualGroup.visible = true; 
+            } else {
+                b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
+                b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
+
+                activeCamera = orthoCamera;
+                
+                activeCamera.position.set(0, 10, 0); 
+                activeCamera.lookAt(0,0,0);
+                activeCamera.zoom = 1; 
+                activeCamera.updateProjectionMatrix();
+
+                controls.object = activeCamera;
+                controls.enabled = true;
+                controls.enableRotate = false; 
+                controls.enableZoom = true;    
+                controls.enablePan = true;
+                
+                visualGroup.visible = false; 
+            }
+        }
+
+        window.setCapColor = function(hexStr) {
+            capMaterial.color.setStyle(hexStr);
+        }
+        
+        window.togglePanel = function() {
+            const content = document.getElementById('panel-content');
+            const btn = document.getElementById('minimize-btn');
+            isPanelOpen = !isPanelOpen;
+            if(isPanelOpen) {
+                content.style.display = 'block';
+                btn.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.display = 'none';
+                btn.style.transform = 'rotate(180deg)';
+            }
+        }
+
+        function onWindowResize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const aspect = w / h;
+
+            perspectiveCamera.aspect = aspect;
+            perspectiveCamera.updateProjectionMatrix();
+
+            const fH = FRUSTUM_SIZE; 
+            const fW = fH * aspect;
+            orthoCamera.left = -fW / 2;
+            orthoCamera.right = fW / 2;
+            orthoCamera.top = fH / 2;
+            orthoCamera.bottom = -fH / 2;
+            orthoCamera.updateProjectionMatrix();
+
+            renderer.setSize(w, h);
+            
+            updateFrameHelper();
+        }
+
+        init();
+    </script>
+</body>
+</html>
