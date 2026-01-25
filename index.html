@@ -46,7 +46,7 @@
             <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V5.1</h1>
+                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V5.3</h1>
                 </div>
                 <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -231,7 +231,7 @@
         <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
             <div id="rec-progress-bar" class="bg-red-500 h-1.5 rounded-full" style="width: 0%"></div>
         </div>
-        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering. High Quality.</p>
+        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering. Slow & Safe Mode.</p>
     </div>
 
     <!-- 3D Canvas -->
@@ -272,7 +272,7 @@
         // Export State
         let isProcessingVideo = false;
         let captureScale = 1.0; 
-        let preExportState = { width: 0, height: 0 };
+        let preExportState = { width: 0, height: 0, pixelRatio: 1 };
 
         // --- INIT ---
         function init() {
@@ -301,6 +301,10 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.localClippingEnabled = true; 
             renderer.shadowMap.enabled = true;
+            
+            // Check Capabilities
+            console.log("Max Texture Size:", renderer.capabilities.maxTextureSize);
+            
             container.appendChild(renderer.domElement);
 
             // 4. Render Target (For Slice Capture)
@@ -350,14 +354,11 @@
                             return;
                         }
 
-                        // EDGE DETECTION (Inner Stroke)
-                        // If current pixel is Opaque...
+                        // EDGE DETECTION
                         if (center.a > 0.5) {
                             float w = uOutlineWidth;
                             vec2 pixelSize = vec2(1.0) / uResolution;
                             
-                            // Check neighbors at distance W
-                            // If any neighbor is Transparent, this is an edge pixel
                             float n1 = texture2D(tDiffuse, vUv + vec2(0.0, w) * pixelSize).a;
                             float n2 = texture2D(tDiffuse, vUv + vec2(0.0, -w) * pixelSize).a;
                             float n3 = texture2D(tDiffuse, vUv + vec2(w, 0.0) * pixelSize).a;
@@ -498,16 +499,15 @@
         function performMultiPassRender() {
             // 1. PREP: Stencil Pass (Render slice to Texture)
             
-            // Save state
             const currentBg = scene.background;
             const visVisible = visualGroup.visible;
             
             // Setup for Mask Pass
-            scene.background = null; // Transparent background for texture
-            visualGroup.visible = false; // Hide 3D model
-            stencilGroup.visible = true; // Show Stencil Calc
-            capGroup.visible = true;     // Show Cap
-            frameHelper.visible = false; // Don't render helper to texture
+            scene.background = null; 
+            visualGroup.visible = false; 
+            stencilGroup.visible = true; 
+            capGroup.visible = true;     
+            frameHelper.visible = false; 
 
             // Render to Target
             renderer.setRenderTarget(renderTarget);
@@ -515,57 +515,41 @@
             renderer.render(scene, activeCamera);
             
             // 2. COMPOSITE: Screen Pass
-            
-            // Restore State for Screen
             renderer.setRenderTarget(null);
             scene.background = currentBg;
             visualGroup.visible = visVisible; 
-            stencilGroup.visible = false; // Hide stencil logic from screen
-            capGroup.visible = false;     // Hide raw cap (we use post-process result)
-            frameHelper.visible = document.getElementById('show-frame').checked;
+            stencilGroup.visible = false; 
+            capGroup.visible = false;     
+            frameHelper.visible = document.getElementById('show-frame').checked && !isProcessingVideo;
 
-            // Render 3D Model First
             renderer.clear();
             if(visVisible) {
                 renderer.render(scene, activeCamera);
             }
 
-            // Render Slice Overlay (Post Process Quad)
-            // This draws the slice outline/fill on top
             postMaterial.uniforms.tDiffuse.value = renderTarget.texture;
             postMaterial.uniforms.uIsOutline.value = outlineMode ? 1 : 0;
             
-            // Don't clear, just draw on top
             renderer.autoClear = false;
             renderer.render(postScene, postCamera);
             renderer.autoClear = true;
             
-            // Render UI Helper on top of everything
             if(frameHelper.visible) {
-                // If the main mesh was visible, the helper was already drawn in the first pass.
-                // If the main mesh was HIDDEN, we haven't drawn the helper yet.
-                
                 if(!visVisible) {
-                    // We need to draw the helper separately
                     visualGroup.visible = false;
                     stencilGroup.visible = false;
                     capGroup.visible = false;
                     
-                    // FIX: Temporarily remove background so we don't erase the slice we just drew
                     scene.background = null; 
-                    
                     renderer.autoClear = false;
                     renderer.render(scene, activeCamera);
                     renderer.autoClear = true;
-                    
-                    // Restore background for next frame
                     scene.background = currentBg;
                 }
             }
             
-            // Restore visibility for next frame logic / controls interactions
             visualGroup.visible = visVisible;
-            stencilGroup.visible = true; // Reset for next loop
+            stencilGroup.visible = true; 
             capGroup.visible = true;
         }
 
@@ -661,6 +645,8 @@
                     visualGroup.visible = false;
                 }
                 
+                toggleOutlineMode(document.getElementById('outline-mode').checked);
+                
                 resetOrientationUI();
                 updateFrameHelper(); 
 
@@ -751,29 +737,54 @@
             isProcessingVideo = true;
             const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
 
+            // 1. Save State & Force 1:1 Pixel Ratio
+            // This prevents high-DPI screens from trying to render 4k/8k textures when 2k is requested
+            preExportState.width = window.innerWidth;
+            preExportState.height = window.innerHeight;
+            preExportState.pixelRatio = renderer.getPixelRatio();
+            
+            renderer.setPixelRatio(1); // Critical Fix for Resolution Crash
+
             const w = parseInt(document.getElementById('export-w').value) || 1080;
             const h = parseInt(document.getElementById('export-h').value) || 1080;
             const width = w % 2 === 0 ? w : w - 1;
             const height = h % 2 === 0 ? h : h - 1;
+            
+            // Check GPU Max Size
+            const maxTex = renderer.capabilities.maxTextureSize;
+            if(width > maxTex || height > maxTex) {
+                alert(`Resolution too high! Your GPU supports max ${maxTex}x${maxTex}.`);
+                restoreState(document.getElementById('show-frame').checked, visualGroup.visible);
+                isProcessingVideo = false;
+                return;
+            }
+
             const dur = parseInt(document.getElementById('export-duration').value) || 5;
             const fps = parseInt(document.getElementById('export-fps').value) || 60;
             const bitrate = 10_000_000; 
 
-            preExportState.width = window.innerWidth;
-            preExportState.height = window.innerHeight;
             isAnimate = false;
             document.getElementById('anim-toggle').checked = false;
             
             const wasFrameVisible = frameHelper.visible;
             frameHelper.visible = false; 
+            const wasMeshVisible = visualGroup.visible; // Capture visibility state
 
             document.getElementById('rec-overlay').classList.remove('hidden');
             const percentEl = document.getElementById('rec-percentage');
             const barEl = document.getElementById('rec-progress-bar');
 
+            // Dispose old targets to free memory
+            if(renderTarget) renderTarget.dispose();
+
             // Resize everything for export
             renderer.setSize(width, height);
-            renderTarget.setSize(width, height); // IMPORTANT
+            renderTarget = new THREE.WebGLRenderTarget(width, height, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                format: THREE.RGBAFormat,
+                stencilBuffer: true
+            });
             postMaterial.uniforms.uResolution.value.set(width, height); // Update shader resolution
 
             activeCamera = orthoCamera;
@@ -790,7 +801,6 @@
             orthoCamera.lookAt(0, 0, 0);
             
             // Auto hide mesh during export
-            const wasMeshVisible = visualGroup.visible;
             visualGroup.visible = false; 
 
             const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width, height }, fastStart: 'in-memory' });
@@ -798,7 +808,23 @@
                 output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
                 error: e => { console.error("Encoding error:", e); isProcessingVideo = false; }
             });
-            videoEncoder.configure({ codec: 'avc1.4d002a', width, height, bitrate, framerate: fps });
+
+            // Dynamic Level Selection
+            const pixelCount = width * height;
+            let codec = 'avc1.4d002a'; // Level 4.2 
+            let targetBitrate = 10_000_000; 
+
+            if (pixelCount > 2228224) {
+                codec = 'avc1.4d0033'; // Level 5.1 
+                targetBitrate = 25_000_000; 
+            }
+
+            videoEncoder.configure({
+                codec: codec, 
+                width, height, 
+                bitrate: targetBitrate, 
+                framerate: fps
+            });
 
             const totalFrames = fps * dur;
             const frameDurationUs = 1e6 / fps; 
@@ -822,26 +848,52 @@
                 percentEl.textContent = pct;
                 barEl.style.width = pct;
 
-                await new Promise(r => setTimeout(r, 0));
+                // Increased delay for safety (50ms)
+                await new Promise(r => setTimeout(r, 50));
             }
 
-            await videoEncoder.flush();
-            muxer.finalize();
-
-            const { buffer } = muxer.target; 
-            const blob = new Blob([buffer], { type: 'video/mp4' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `slice_render_${width}x${height}_${fps}fps.mp4`;
-            a.click();
+            // 9. Finalize
+            try {
+                if (videoEncoder.state !== 'closed') {
+                    await videoEncoder.flush();
+                }
+                muxer.finalize();
+                
+                const { buffer } = muxer.target; 
+                const blob = new Blob([buffer], { type: 'video/mp4' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `slice_render_${width}x${height}_${fps}fps.mp4`;
+                a.click();
+            } catch (e) {
+                console.error("Export failed during finalization:", e);
+                alert("Export failed. Resolution might be too high for this browser/device.");
+            }
 
             restoreState(wasFrameVisible, wasMeshVisible);
             isProcessingVideo = false;
         }
 
         function restoreState(restoreFrame, restoreMesh) {
+            // Restore Pixel Ratio & Size
+            renderer.setPixelRatio(preExportState.pixelRatio);
             renderer.setSize(preExportState.width, preExportState.height);
+            
+            // Dispose Large Target
+            if(renderTarget) renderTarget.dispose();
+
+            // Restore Render Target to window size
+            const w = preExportState.width;
+            const h = preExportState.height;
+            renderTarget = new THREE.WebGLRenderTarget(w * preExportState.pixelRatio, h * preExportState.pixelRatio, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                format: THREE.RGBAFormat,
+                stencilBuffer: true
+            });
+            postMaterial.uniforms.uResolution.value.set(w * preExportState.pixelRatio, h * preExportState.pixelRatio);
+
             onWindowResize(); 
             document.getElementById('rec-overlay').classList.add('hidden');
             if(frameHelper) frameHelper.visible = restoreFrame;
