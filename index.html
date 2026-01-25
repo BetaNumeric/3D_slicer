@@ -46,7 +46,7 @@
             <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V5.3</h1>
+                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V5.8</h1>
                 </div>
                 <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -59,9 +59,19 @@
             <div id="panel-content" class="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
                 
                 <!-- View Mode -->
-                <div class="bg-black/40 p-1 rounded-lg flex shadow-inner border border-gray-800">
-                    <button id="btn-3d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md">3D View</button>
-                    <button id="btn-2d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800">2D Ortho</button>
+                <div class="bg-black/40 p-1 rounded-lg border border-gray-800">
+                    <div class="flex shadow-inner mb-2">
+                        <button id="btn-3d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md">3D View</button>
+                        <button id="btn-2d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800">2D Map</button>
+                    </div>
+                    
+                    <!-- 3D Projection Toggle -->
+                    <div id="projection-toggle" class="flex justify-end px-1">
+                        <label class="flex items-center gap-2 text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors">
+                            <span>Use Orthographic Camera</span>
+                            <input type="checkbox" id="ortho-3d-check" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" onchange="toggle3DProjection(this.checked)">
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Slice Control -->
@@ -169,33 +179,65 @@
                 <div class="space-y-3">
                      <label class="text-xs font-bold uppercase text-gray-500 block">Appearance</label>
                      
-                     <!-- Outline Controls -->
-                     <div class="bg-gray-800/50 p-2 rounded border border-gray-700 space-y-2">
-                        <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                            <span>Outline Only</span>
-                            <input type="checkbox" id="outline-mode" class="w-3 h-3 accent-purple-500 rounded bg-gray-700 border-gray-600">
-                        </label>
-                        
-                        <div id="outline-settings" class="hidden space-y-1">
-                            <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Thickness</label>
-                                <span id="outline-val" class="text-[10px] text-purple-400 font-mono">2 px</span>
-                            </div>
-                            <input type="range" id="outline-width" min="1" max="10" step="1" value="2" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
-                        </div>
+                     <!-- Render Style Switch -->
+                     <div class="bg-gray-800/50 p-1 rounded flex gap-1">
+                         <button id="style-mesh" class="flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('mesh')">Solid Mesh</button>
+                         <button id="style-points" class="flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('points')">Point Cloud</button>
                      </div>
 
-                     <!-- Show Mesh Toggle -->
-                     <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                        <span>Show 3D Mesh</span>
-                        <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
-                     </label>
+                     <!-- Mesh Options -->
+                     <div id="mesh-options" class="space-y-3">
+                         <div id="outline-controls" class="bg-gray-800/50 p-2 rounded border border-gray-700 space-y-2">
+                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                <span>Outline Only</span>
+                                <input type="checkbox" id="outline-mode" class="w-3 h-3 accent-purple-500 rounded bg-gray-700 border-gray-600">
+                            </label>
+                            <div id="outline-settings" class="hidden space-y-1">
+                                <div class="flex justify-between">
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Thickness</label>
+                                    <span id="outline-val" class="text-[10px] text-purple-400 font-mono">2 px</span>
+                                </div>
+                                <input type="range" id="outline-width" min="1" max="10" step="1" value="2" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                            </div>
+                         </div>
 
-                     <div class="flex flex-col gap-2">
-                        <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
-                        <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
-                            <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
-                        </div>
+                         <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                            <span>Show 3D Mesh</span>
+                            <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
+                         </label>
+
+                         <div class="flex flex-col gap-2">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
+                            <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
+                                <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
+                            </div>
+                         </div>
+                     </div>
+                     
+                     <!-- Point Options (Hidden by default) -->
+                     <div id="point-options" class="hidden space-y-3">
+                         <div>
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point Size</label>
+                                <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.5</span>
+                            </div>
+                            <!-- Point Size Range: 0.01 - 2.0 -->
+                            <input type="range" id="point-size" min="0.01" max="2.0" step="0.01" value="0.5" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                         </div>
+                         <div>
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Density</label>
+                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">40%</span>
+                            </div>
+                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="0.4" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                         </div>
+                         <div>
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Thickness</label>
+                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.01</span>
+                            </div>
+                            <input type="range" id="point-thick" min="0.001" max="0.1" step="0.001" value="0.01" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                         </div>
                      </div>
                 </div>
 
@@ -231,7 +273,7 @@
         <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
             <div id="rec-progress-bar" class="bg-red-500 h-1.5 rounded-full" style="width: 0%"></div>
         </div>
-        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering. Slow & Safe Mode.</p>
+        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering. Safe Mode.</p>
     </div>
 
     <!-- 3D Canvas -->
@@ -241,14 +283,20 @@
         // --- CONSTANTS ---
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
         const FRUSTUM_SIZE = 3.0; 
+        const MAX_POINTS = 1000000; // Increased to 1 Million
 
         // --- VARIABLES ---
         let scene, renderer, controls;
         let perspectiveCamera, orthoCamera, activeCamera;
+        let orthoCamera3D; // New camera for 3D ortho view
         let visualGroup, stencilGroup, capGroup; 
-        let activeWrappers = { visual: null, back: null, front: null };
+        let pointGroup; 
+        let activeWrappers = { visual: null, back: null, front: null, points: null };
         
         let clippingPlane;
+        const slabPlaneTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+        const slabPlaneBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
         let capMesh;
         let frameHelper; 
         let isAnimate = true;
@@ -256,7 +304,12 @@
         let time = 0;
         let modelBounds = { min: -1, max: 1 };
         let viewMode = '3d';
+        let renderStyle = 'mesh'; 
+        let isOrtho3D = false; // Toggle state for 3D projection
+        
         let capMaterial, backMat, frontMat;
+        let pointMaterials = []; 
+        let pointCountPercent = 0.4;
         let isPanelOpen = true;
         
         // Post Processing Vars
@@ -266,8 +319,12 @@
 
         // Settings
         let outlineMode = false;
-        let outlineWidth = 2.0; // pixels
+        let outlineWidth = 2.0; 
         let sliceColor = new THREE.Color(0xffffff);
+        
+        // Point Settings
+        let pointSize = 0.5;
+        let sliceThickness = 0.01;
 
         // Export State
         let isProcessingVideo = false;
@@ -284,14 +341,22 @@
             scene.background = new THREE.Color(0x000000); 
 
             // 2. Cameras
+            // A. Perspective (Default 3D)
             perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
             perspectiveCamera.position.set(3, 2, 4);
 
+            // B. Ortho 2D (Top Down)
             const fH = FRUSTUM_SIZE;
             const fW = fH * aspect;
             orthoCamera = new THREE.OrthographicCamera(-fW / 2, fW / 2, fH / 2, -fH / 2, 0.1, 100);
             orthoCamera.position.set(0, 10, 0); 
             orthoCamera.lookAt(0, 0, 0);
+            
+            // C. Ortho 3D (Interactive)
+            // Initial frustum similar to perspective view at distance
+            orthoCamera3D = new THREE.OrthographicCamera(-fW / 2, fW / 2, fH / 2, -fH / 2, 0.1, 100);
+            orthoCamera3D.position.copy(perspectiveCamera.position);
+            orthoCamera3D.lookAt(0,0,0);
 
             activeCamera = perspectiveCamera;
 
@@ -301,13 +366,10 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.localClippingEnabled = true; 
             renderer.shadowMap.enabled = true;
-            
-            // Check Capabilities
             console.log("Max Texture Size:", renderer.capabilities.maxTextureSize);
-            
             container.appendChild(renderer.domElement);
 
-            // 4. Render Target (For Slice Capture)
+            // 4. Render Target
             renderTarget = new THREE.WebGLRenderTarget(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio, {
                 minFilter: THREE.LinearFilter,
                 magFilter: THREE.LinearFilter,
@@ -315,7 +377,7 @@
                 stencilBuffer: true
             });
 
-            // 5. Post-Processing Scene (For Edge Detection)
+            // 5. Post-Processing
             postScene = new THREE.Scene();
             postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
             postMaterial = new THREE.ShaderMaterial({
@@ -324,7 +386,7 @@
                     uResolution: { value: new THREE.Vector2(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio) },
                     uColor: { value: sliceColor },
                     uOutlineWidth: { value: outlineWidth },
-                    uIsOutline: { value: 0 } // 0 = Solid, 1 = Outline
+                    uIsOutline: { value: 0 } 
                 },
                 vertexShader: `
                     varying vec2 vUv;
@@ -343,34 +405,22 @@
 
                     void main() {
                         vec4 center = texture2D(tDiffuse, vUv);
-                        
-                        // If not outline mode, just render the slice color where alpha > 0
                         if (uIsOutline < 0.5) {
-                            if (center.a > 0.0) {
-                                gl_FragColor = vec4(uColor, 1.0);
-                            } else {
-                                discard;
-                            }
+                            if (center.a > 0.0) gl_FragColor = vec4(uColor, 1.0);
+                            else discard;
                             return;
                         }
-
-                        // EDGE DETECTION
                         if (center.a > 0.5) {
                             float w = uOutlineWidth;
                             vec2 pixelSize = vec2(1.0) / uResolution;
-                            
                             float n1 = texture2D(tDiffuse, vUv + vec2(0.0, w) * pixelSize).a;
                             float n2 = texture2D(tDiffuse, vUv + vec2(0.0, -w) * pixelSize).a;
                             float n3 = texture2D(tDiffuse, vUv + vec2(w, 0.0) * pixelSize).a;
                             float n4 = texture2D(tDiffuse, vUv + vec2(-w, 0.0) * pixelSize).a;
-                            
-                            if (n1 < 0.5 || n2 < 0.5 || n3 < 0.5 || n4 < 0.5) {
-                                gl_FragColor = vec4(uColor, 1.0); // Edge
-                            } else {
-                                discard; // Inside
-                            }
+                            if (n1 < 0.5 || n2 < 0.5 || n3 < 0.5 || n4 < 0.5) gl_FragColor = vec4(uColor, 1.0); 
+                            else discard; 
                         } else {
-                            discard; // Outside
+                            discard; 
                         }
                     }
                 `,
@@ -403,11 +453,18 @@
             visualGroup = new THREE.Group();
             stencilGroup = new THREE.Group();
             capGroup = new THREE.Group();
+            pointGroup = new THREE.Group(); 
+            pointGroup.visible = false; 
             
-            // Stencil is hidden by default in main render, used for RTT
+            visualGroup.renderOrder = 0;
+            stencilGroup.renderOrder = 1;
+            capGroup.renderOrder = 2;
+            pointGroup.renderOrder = 3;
+
             scene.add(visualGroup);
             scene.add(stencilGroup); 
             scene.add(capGroup);
+            scene.add(pointGroup);
 
             // 10. Helper
             const frameGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)); 
@@ -418,7 +475,6 @@
             scene.add(frameHelper);
 
             // 11. Materials
-            // Basic Material is safest for stencil ops
             const stencilConfig = {
                 depthWrite: false,
                 depthTest: false,
@@ -446,7 +502,6 @@
                 stencilZPass: THREE.DecrementWrapStencilOp
             });
 
-            // The Cap used for the internal RTT pass - Solid White
             capMaterial = new THREE.MeshBasicMaterial({ 
                 color: 0xffffff, 
                 stencilWrite: true,
@@ -461,7 +516,9 @@
             const planeGeom = new THREE.PlaneGeometry(100, 100);
             capMesh = new THREE.Mesh(planeGeom, capMaterial);
             capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
-            capMesh.renderOrder = 999; 
+            capMesh.renderOrder = 2; 
+            capMesh.castShadow = false;
+            capMesh.receiveShadow = true;
             capGroup.add(capMesh);
 
             // Load
@@ -476,11 +533,20 @@
         }
 
         // --- CORE RENDER FUNCTION ---
-        // Handles Multi-Pass Rendering
         function renderFrame() {
-            if(isProcessingVideo) return; // Video loop handles itself
+            if(isProcessingVideo) return; 
 
-            if (isAnimate && visualGroup.children.length > 0) {
+            // Update Point Uniforms every frame for camera switch
+            const isOrtho = (activeCamera.isOrthographicCamera) ? 1.0 : 0.0;
+            // Use active camera zoom to scale points in ortho mode
+            const orthoZoom = activeCamera.zoom;
+            
+            pointMaterials.forEach(m => {
+                m.uniforms.uIsOrtho.value = isOrtho;
+                m.uniforms.uOrthoZoom.value = orthoZoom;
+            });
+
+            if (isAnimate) {
                 time += 0.01 * scanSpeed;
                 const t = (time % 2);
                 const alpha = t < 1 ? t : 2 - t; 
@@ -493,28 +559,29 @@
             }
 
             controls.update();
-            performMultiPassRender();
+            
+            if (renderStyle === 'points') {
+                renderer.render(scene, activeCamera);
+            } else {
+                performMultiPassRender();
+            }
         }
 
         function performMultiPassRender() {
-            // 1. PREP: Stencil Pass (Render slice to Texture)
-            
             const currentBg = scene.background;
             const visVisible = visualGroup.visible;
             
-            // Setup for Mask Pass
             scene.background = null; 
             visualGroup.visible = false; 
             stencilGroup.visible = true; 
             capGroup.visible = true;     
             frameHelper.visible = false; 
+            pointGroup.visible = false; 
 
-            // Render to Target
             renderer.setRenderTarget(renderTarget);
             renderer.clear();
             renderer.render(scene, activeCamera);
             
-            // 2. COMPOSITE: Screen Pass
             renderer.setRenderTarget(null);
             scene.background = currentBg;
             visualGroup.visible = visVisible; 
@@ -539,7 +606,6 @@
                     visualGroup.visible = false;
                     stencilGroup.visible = false;
                     capGroup.visible = false;
-                    
                     scene.background = null; 
                     renderer.autoClear = false;
                     renderer.render(scene, activeCamera);
@@ -551,6 +617,152 @@
             visualGroup.visible = visVisible;
             stencilGroup.visible = true; 
             capGroup.visible = true;
+        }
+
+        // --- CUSTOM POINT SHADER ---
+        const createPointMaterial = (texture, color) => {
+            return new THREE.ShaderMaterial({
+                uniforms: {
+                    map: { value: texture || null },
+                    size: { value: pointSize },
+                    diffuse: { value: new THREE.Color(color) },
+                    hasTexture: { value: texture ? 1 : 0 },
+                    uIsOrtho: { value: 0.0 },
+                    uOrthoZoom: { value: 1.0 }
+                },
+                vertexShader: `
+                    uniform float size;
+                    uniform float uIsOrtho;
+                    uniform float uOrthoZoom;
+                    varying vec2 vUv;
+                    #include <clipping_planes_pars_vertex>
+                    void main() {
+                        vUv = uv;
+                        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+                        
+                        if (uIsOrtho > 0.5) {
+                            // Ortho Size: Fixed pixel size * zoom factor (approx 60x scalar)
+                            gl_PointSize = size * 60.0 * uOrthoZoom;
+                        } else {
+                            // Perspective Size: Attenuate by depth
+                            gl_PointSize = size * ( 50.0 / -mvPosition.z );
+                        }
+                        
+                        gl_Position = projectionMatrix * mvPosition;
+                        #include <clipping_planes_vertex>
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D map;
+                    uniform vec3 diffuse;
+                    uniform float hasTexture;
+                    varying vec2 vUv;
+                    #include <clipping_planes_pars_fragment>
+                    void main() {
+                        #include <clipping_planes_fragment>
+                        
+                        vec4 color = vec4(diffuse, 1.0);
+                        if(hasTexture > 0.5) {
+                            color *= texture2D(map, vUv);
+                        }
+                        
+                        // Round Point
+                        vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+                        if (dot(cxy, cxy) > 1.0) discard;
+
+                        gl_FragColor = color;
+                    }
+                `,
+                clipping: true,
+                transparent: false,
+                clippingPlanes: [slabPlaneTop, slabPlaneBottom] 
+            });
+        };
+        
+        // --- SAMPLER UTILS ---
+        function createSamplingGeometry(mesh, count) {
+            const geom = mesh.geometry;
+            if(!geom.index) return geom.clone(); 
+            
+            const posAttr = geom.attributes.position;
+            const uvAttr = geom.attributes.uv;
+            const indexAttr = geom.index;
+            const faces = indexAttr.count / 3;
+            
+            const areas = new Float32Array(faces);
+            let totalArea = 0;
+            const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+            const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+            
+            for(let i=0; i<faces; i++) {
+                const i3 = i*3;
+                const a = indexAttr.getX(i3);
+                const b = indexAttr.getX(i3+1);
+                const c = indexAttr.getX(i3+2);
+                
+                va.fromBufferAttribute(posAttr, a);
+                vb.fromBufferAttribute(posAttr, b);
+                vc.fromBufferAttribute(posAttr, c);
+                
+                ab.subVectors(vb, va);
+                ac.subVectors(vc, va);
+                const area = ab.cross(ac).length() * 0.5;
+                areas[i] = area;
+                totalArea += area;
+            }
+            
+            const finalPos = new Float32Array(count * 3);
+            const finalUV = new Float32Array(count * 2);
+            
+            const cdf = new Float32Array(faces);
+            let acc = 0;
+            for(let i=0; i<faces; i++) {
+                acc += areas[i];
+                cdf[i] = acc;
+            }
+            
+            for(let i=0; i<count; i++) {
+                const r = Math.random() * totalArea;
+                let start = 0, end = faces - 1;
+                let faceIdx = -1;
+                while(start <= end) {
+                    const mid = (start + end) >> 1;
+                    if(r < cdf[mid]) {
+                        faceIdx = mid;
+                        end = mid - 1;
+                    } else {
+                        start = mid + 1;
+                    }
+                }
+                if(faceIdx === -1) faceIdx = faces - 1; 
+                
+                const r1 = Math.random();
+                const r2 = Math.random();
+                const sqrtR1 = Math.sqrt(r1);
+                const u = 1 - sqrtR1;
+                const v = sqrtR1 * (1 - r2);
+                const w = sqrtR1 * r2;
+                
+                const i3 = faceIdx * 3;
+                const ia = indexAttr.getX(i3);
+                const ib = indexAttr.getX(i3+1);
+                const ic = indexAttr.getX(i3+2);
+                
+                finalPos[i*3] = posAttr.getX(ia)*u + posAttr.getX(ib)*v + posAttr.getX(ic)*w;
+                finalPos[i*3+1] = posAttr.getY(ia)*u + posAttr.getY(ib)*v + posAttr.getY(ic)*w;
+                finalPos[i*3+2] = posAttr.getZ(ia)*u + posAttr.getZ(ib)*v + posAttr.getZ(ic)*w;
+                
+                if(uvAttr) {
+                    finalUV[i*2] = uvAttr.getX(ia)*u + uvAttr.getX(ib)*v + uvAttr.getX(ic)*w;
+                    finalUV[i*2+1] = uvAttr.getY(ia)*u + uvAttr.getY(ib)*v + uvAttr.getY(ic)*w;
+                }
+            }
+            
+            const bufferGeo = new THREE.BufferGeometry();
+            bufferGeo.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
+            if(uvAttr) bufferGeo.setAttribute('uv', new THREE.BufferAttribute(finalUV, 2));
+            
+            return bufferGeo;
         }
 
         function loadModel(url) {
@@ -568,15 +780,17 @@
             loader.load(url, (gltf) => {
                 while(visualGroup.children.length > 0) visualGroup.remove(visualGroup.children[0]);
                 while(stencilGroup.children.length > 0) stencilGroup.remove(stencilGroup.children[0]);
+                while(pointGroup.children.length > 0) pointGroup.remove(pointGroup.children[0]);
                 
-                activeWrappers = { visual: null, back: null, front: null };
+                pointMaterials = [];
+                activeWrappers = { visual: null, back: null, front: null, points: null };
 
                 const root = gltf.scene;
                 root.updateMatrixWorld(true);
                 const rawBox = new THREE.Box3().setFromObject(root);
                 
                 if (rawBox.isEmpty()) {
-                    statusText.textContent = "Warning: Model appears empty.";
+                    statusText.textContent = "Warning: Empty model.";
                     return; 
                 }
 
@@ -600,6 +814,11 @@
                 const frontRoot = root.clone();
                 frontWrapper.add(frontRoot);
                 frontWrapper.scale.set(scale, scale, scale);
+                
+                const pointWrapper = new THREE.Group();
+                pointWrapper.position.copy(visWrapper.position);
+                pointWrapper.rotation.copy(visWrapper.rotation);
+                pointWrapper.scale.set(scale, scale, scale);
 
                 // Setup Stencil
                 const setupStencil = (mesh, mat) => {
@@ -609,28 +828,94 @@
                     mesh.receiveShadow = false;
                     mesh.frustumCulled = false; 
                 };
-
                 backRoot.traverse((o) => { if (o.isMesh) setupStencil(o, backMat); });
                 frontRoot.traverse((o) => { if (o.isMesh) setupStencil(o, frontMat); });
+                root.traverse((o) => { if (o.isMesh) { o.material.clippingPlanes = [clippingPlane]; o.material.side = THREE.DoubleSide; } });
+                
+                // --- HIGH DENSITY POINT GENERATION ---
+                let totalSurfaceArea = 0;
+                const meshList = [];
+                
+                const getMeshArea = (mesh) => {
+                    if(!mesh.geometry.index) return 0; 
+                    const idx = mesh.geometry.index;
+                    const pos = mesh.geometry.attributes.position;
+                    let a = 0;
+                    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+                    const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+                    for(let i=0; i<idx.count; i+=3) {
+                        va.fromBufferAttribute(pos, idx.getX(i));
+                        vb.fromBufferAttribute(pos, idx.getX(i+1));
+                        vc.fromBufferAttribute(pos, idx.getX(i+2));
+                        ab.subVectors(vb, va);
+                        ac.subVectors(vc, va);
+                        a += ab.cross(ac).length() * 0.5;
+                    }
+                    return a;
+                };
 
-                // Visual materials
-                root.traverse((o) => {
-                    if (o.isMesh) {
-                        o.material.clippingPlanes = [clippingPlane];
-                        o.material.clipShadows = true;
-                        o.material.side = THREE.DoubleSide;
-                        o.castShadow = true;
-                        o.receiveShadow = true;
+                root.traverse(o => {
+                    if(o.isMesh && o.geometry) {
+                        const area = getMeshArea(o);
+                        if(area > 0) {
+                            meshList.push({ mesh: o, area: area });
+                            totalSurfaceArea += area;
+                        }
                     }
                 });
+
+                // Re-implementation of Hierarchy Clone for Points
+                const pointRoot = root.clone();
+                const pointsToReplace = [];
+                let cloneTotalArea = 0;
+                const cloneList = [];
+                
+                pointRoot.traverse(o => {
+                   if(o.isMesh && o.geometry && o.geometry.index) {
+                       const area = getMeshArea(o);
+                       cloneTotalArea += area;
+                       cloneList.push({obj: o, area: area});
+                   } 
+                });
+                
+                cloneList.forEach(item => {
+                    const ratio = item.area / cloneTotalArea;
+                    const count = Math.floor(MAX_POINTS * ratio);
+                    if(count > 0) {
+                         const sampledGeo = createSamplingGeometry(item.obj, count);
+                         const mat = createPointMaterial(item.obj.material.map, item.obj.material.color);
+                         pointMaterials.push(mat);
+                         
+                         const p = new THREE.Points(sampledGeo, mat);
+                         p.userData.maxCount = count;
+                         
+                         item.obj.geometry = sampledGeo;
+                         item.obj.material = mat;
+                         const parent = item.obj.parent;
+                         if(parent) {
+                             p.position.copy(item.obj.position);
+                             p.rotation.copy(item.obj.rotation);
+                             p.scale.copy(item.obj.scale);
+                             p.matrixAutoUpdate = true;
+                             parent.add(p);
+                             parent.remove(item.obj);
+                         }
+                    }
+                });
+                
+                pointRoot.traverse(o => { if(o.isMesh) o.visible = false; });
+                
+                pointWrapper.add(pointRoot);
 
                 visualGroup.add(visWrapper);
                 stencilGroup.add(backWrapper);
                 stencilGroup.add(frontWrapper);
+                pointGroup.add(pointWrapper);
                 
                 activeWrappers.visual = visWrapper;
                 activeWrappers.back = backWrapper;
                 activeWrappers.front = frontWrapper;
+                activeWrappers.points = pointWrapper;
 
                 updateBounds();
                 controls.target.set(0, 0, 0);
@@ -646,9 +931,10 @@
                 }
                 
                 toggleOutlineMode(document.getElementById('outline-mode').checked);
-                
+                setRenderStyle(renderStyle);
                 resetOrientationUI();
                 updateFrameHelper(); 
+                updatePointDensity();
 
             }, undefined, (e) => {
                 console.error(e);
@@ -656,6 +942,17 @@
                 statusText.classList.remove('text-amber-400');
                 statusText.classList.add('text-red-500');
                 spinner.classList.add('hidden'); 
+            });
+        }
+        
+        function updatePointDensity() {
+            const pct = parseFloat(document.getElementById('point-count').value);
+            document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
+            pointGroup.traverse(o => {
+                if(o.isPoints && o.userData.maxCount) {
+                    const count = Math.floor(o.userData.maxCount * pct);
+                    o.geometry.setDrawRange(0, count);
+                }
             });
         }
         
@@ -683,6 +980,7 @@
             activeWrappers.visual.rotation.copy(euler);
             activeWrappers.back.rotation.copy(euler);
             activeWrappers.front.rotation.copy(euler);
+            if(activeWrappers.points) activeWrappers.points.rotation.copy(euler);
             
             updateBounds();
             if (!isAnimate) {
@@ -713,6 +1011,73 @@
             if(isOutline) settings.classList.remove('hidden');
             else settings.classList.add('hidden');
         }
+        
+        window.setRenderStyle = function(style) {
+            renderStyle = style;
+            const btnMesh = document.getElementById('style-mesh');
+            const btnPoints = document.getElementById('style-points');
+            const meshOpts = document.getElementById('mesh-options');
+            const pointOpts = document.getElementById('point-options');
+            
+            if (style === 'mesh') {
+                btnMesh.className = "flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
+                btnPoints.className = "flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+                meshOpts.classList.remove('hidden');
+                pointOpts.classList.add('hidden');
+                
+                pointGroup.visible = false;
+                visualGroup.visible = document.getElementById('show-mesh').checked;
+                stencilGroup.visible = true;
+                capGroup.visible = true;
+            } else {
+                btnPoints.className = "flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
+                btnMesh.className = "flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+                pointOpts.classList.remove('hidden');
+                meshOpts.classList.add('hidden');
+                
+                pointGroup.visible = true;
+                visualGroup.visible = false;
+                stencilGroup.visible = false;
+                capGroup.visible = false;
+                
+                updatePlaneHeight(document.getElementById('slice-slider').value);
+            }
+        }
+        
+        window.toggle3DProjection = function(isOrtho) {
+            isOrtho3D = isOrtho;
+            if (viewMode !== '3d') return; 
+
+            const target = controls.target.clone();
+            
+            if (isOrtho) {
+                // Switch to Ortho
+                activeCamera = orthoCamera3D;
+                // Sync View
+                const dist = perspectiveCamera.position.distanceTo(target);
+                const vFOV = perspectiveCamera.fov * Math.PI / 180;
+                const height = 2 * dist * Math.tan(vFOV / 2);
+                const width = height * perspectiveCamera.aspect;
+                
+                orthoCamera3D.left = -width / 2;
+                orthoCamera3D.right = width / 2;
+                orthoCamera3D.top = height / 2;
+                orthoCamera3D.bottom = -height / 2;
+                orthoCamera3D.zoom = 1; 
+                orthoCamera3D.updateProjectionMatrix();
+                
+                orthoCamera3D.position.copy(perspectiveCamera.position);
+                orthoCamera3D.quaternion.copy(perspectiveCamera.quaternion);
+            } else {
+                // Switch to Perspective
+                activeCamera = perspectiveCamera;
+                perspectiveCamera.position.copy(orthoCamera3D.position);
+                perspectiveCamera.quaternion.copy(orthoCamera3D.quaternion);
+            }
+            
+            controls.object = activeCamera;
+            controls.update();
+        }
 
         function updateFrameHelper() {
             if (!frameHelper) return;
@@ -726,7 +1091,7 @@
             frameHelper.visible = document.getElementById('show-frame').checked;
         }
 
-        // --- OFFLINE RENDERING LOGIC (Updated to use Multi-Pass) ---
+        // --- OFFLINE RENDERING LOGIC ---
         async function startExport() {
             if (isProcessingVideo) return;
             if (typeof VideoEncoder === 'undefined') {
@@ -737,23 +1102,21 @@
             isProcessingVideo = true;
             const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
 
-            // 1. Save State & Force 1:1 Pixel Ratio
-            // This prevents high-DPI screens from trying to render 4k/8k textures when 2k is requested
+            // Save State
             preExportState.width = window.innerWidth;
             preExportState.height = window.innerHeight;
             preExportState.pixelRatio = renderer.getPixelRatio();
             
-            renderer.setPixelRatio(1); // Critical Fix for Resolution Crash
+            renderer.setPixelRatio(1);
 
             const w = parseInt(document.getElementById('export-w').value) || 1080;
             const h = parseInt(document.getElementById('export-h').value) || 1080;
             const width = w % 2 === 0 ? w : w - 1;
             const height = h % 2 === 0 ? h : h - 1;
             
-            // Check GPU Max Size
             const maxTex = renderer.capabilities.maxTextureSize;
             if(width > maxTex || height > maxTex) {
-                alert(`Resolution too high! Your GPU supports max ${maxTex}x${maxTex}.`);
+                alert(`Resolution too high!`);
                 restoreState(document.getElementById('show-frame').checked, visualGroup.visible);
                 isProcessingVideo = false;
                 return;
@@ -768,16 +1131,14 @@
             
             const wasFrameVisible = frameHelper.visible;
             frameHelper.visible = false; 
-            const wasMeshVisible = visualGroup.visible; // Capture visibility state
+            const wasMeshVisible = visualGroup.visible;
 
             document.getElementById('rec-overlay').classList.remove('hidden');
             const percentEl = document.getElementById('rec-percentage');
             const barEl = document.getElementById('rec-progress-bar');
 
-            // Dispose old targets to free memory
             if(renderTarget) renderTarget.dispose();
 
-            // Resize everything for export
             renderer.setSize(width, height);
             renderTarget = new THREE.WebGLRenderTarget(width, height, {
                 minFilter: THREE.LinearFilter,
@@ -785,7 +1146,7 @@
                 format: THREE.RGBAFormat,
                 stencilBuffer: true
             });
-            postMaterial.uniforms.uResolution.value.set(width, height); // Update shader resolution
+            postMaterial.uniforms.uResolution.value.set(width, height);
 
             activeCamera = orthoCamera;
             const aspect = width / height;
@@ -800,8 +1161,13 @@
             orthoCamera.position.set(0, 10, 0); 
             orthoCamera.lookAt(0, 0, 0);
             
-            // Auto hide mesh during export
-            visualGroup.visible = false; 
+            // Handle Visibility for Export based on Style
+            if (renderStyle === 'mesh') {
+                visualGroup.visible = false; // Hide 3D model, only slice
+            } else {
+                // Point mode - ensure points are visible
+                pointGroup.visible = true;
+            }
 
             const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width, height }, fastStart: 'in-memory' });
             const videoEncoder = new VideoEncoder({
@@ -809,13 +1175,12 @@
                 error: e => { console.error("Encoding error:", e); isProcessingVideo = false; }
             });
 
-            // Dynamic Level Selection
             const pixelCount = width * height;
-            let codec = 'avc1.4d002a'; // Level 4.2 
+            let codec = 'avc1.4d002a'; 
             let targetBitrate = 10_000_000; 
 
             if (pixelCount > 2228224) {
-                codec = 'avc1.4d0033'; // Level 5.1 
+                codec = 'avc1.4d0033'; 
                 targetBitrate = 25_000_000; 
             }
 
@@ -832,12 +1197,29 @@
             for (let i = 0; i <= totalFrames; i++) {
                 if (!isProcessingVideo || videoEncoder.state === 'closed') break; 
 
+                // Update Camera Uniforms for Export (important if we switch to ortho mid-stream)
+                const isOrtho = 1.0; 
+                const orthoZoom = 1.0; // Export uses its own sizing logic via frustum, not zoom prop
+                // Note: Shader uses 'uOrthoZoom' to scale points. 
+                // Since we reset camera zoom to 1 and change frustum, points might look small?
+                // Actually, if we change frustum size, the screen space size of 1 unit changes.
+                // We should pass a compensation factor if we want constant pixel size.
+                // But for now, let's keep it simple. uOrthoZoom = 1 is safe.
+                
+                pointMaterials.forEach(m => {
+                    m.uniforms.uIsOrtho.value = isOrtho;
+                    m.uniforms.uOrthoZoom.value = orthoZoom;
+                });
+
                 const progress = i / totalFrames;
                 const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
                 updatePlaneHeight(yPos);
                 
-                // Use the shared multi-pass logic
-                performMultiPassRender();
+                if (renderStyle === 'mesh') {
+                    performMultiPassRender();
+                } else {
+                    renderer.render(scene, activeCamera);
+                }
                 
                 const timestamp = i * frameDurationUs;
                 const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
@@ -848,11 +1230,9 @@
                 percentEl.textContent = pct;
                 barEl.style.width = pct;
 
-                // Increased delay for safety (50ms)
                 await new Promise(r => setTimeout(r, 50));
             }
 
-            // 9. Finalize
             try {
                 if (videoEncoder.state !== 'closed') {
                     await videoEncoder.flush();
@@ -867,8 +1247,8 @@
                 a.download = `slice_render_${width}x${height}_${fps}fps.mp4`;
                 a.click();
             } catch (e) {
-                console.error("Export failed during finalization:", e);
-                alert("Export failed. Resolution might be too high for this browser/device.");
+                console.error("Export failed:", e);
+                alert("Export failed.");
             }
 
             restoreState(wasFrameVisible, wasMeshVisible);
@@ -876,14 +1256,11 @@
         }
 
         function restoreState(restoreFrame, restoreMesh) {
-            // Restore Pixel Ratio & Size
             renderer.setPixelRatio(preExportState.pixelRatio);
             renderer.setSize(preExportState.width, preExportState.height);
             
-            // Dispose Large Target
             if(renderTarget) renderTarget.dispose();
 
-            // Restore Render Target to window size
             const w = preExportState.width;
             const h = preExportState.height;
             renderTarget = new THREE.WebGLRenderTarget(w * preExportState.pixelRatio, h * preExportState.pixelRatio, {
@@ -898,7 +1275,6 @@
             document.getElementById('rec-overlay').classList.add('hidden');
             if(frameHelper) frameHelper.visible = restoreFrame;
             if (typeof restoreMesh !== 'undefined') visualGroup.visible = restoreMesh;
-            // Sync checkbox
             document.getElementById('show-mesh').checked = visualGroup.visible;
             
             if (viewMode === '3d') setMode('3d'); else setMode('2d');
@@ -906,9 +1282,14 @@
 
         function updatePlaneHeight(val) {
             const v = parseFloat(val);
+            // Mesh Slice
             clippingPlane.constant = v;
-            // No offset needed for post-process overlay
             capMesh.position.y = v;
+            
+            // Point Slab
+            const half = sliceThickness / 2;
+            slabPlaneBottom.constant = -v + half;
+            slabPlaneTop.constant = v + half;
             
             if(!isProcessingVideo) {
                 const slider = document.getElementById('slice-slider');
@@ -953,6 +1334,21 @@
                 postMaterial.uniforms.uOutlineWidth.value = outlineWidth;
                 document.getElementById('outline-val').textContent = outlineWidth.toFixed(0) + ' px';
             });
+            
+            // Point UI
+            document.getElementById('point-size').addEventListener('input', (e) => {
+                pointSize = parseFloat(e.target.value);
+                document.getElementById('point-size-val').textContent = pointSize.toFixed(2);
+                pointMaterials.forEach(m => m.uniforms.size.value = pointSize);
+            });
+            document.getElementById('point-count').addEventListener('input', (e) => {
+                updatePointDensity();
+            });
+            document.getElementById('point-thick').addEventListener('input', (e) => {
+                sliceThickness = parseFloat(e.target.value);
+                document.getElementById('point-thick-val').textContent = sliceThickness.toFixed(3);
+                updatePlaneHeight(document.getElementById('slice-slider').value);
+            });
 
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
                 captureScale = parseFloat(e.target.value);
@@ -972,23 +1368,40 @@
             viewMode = mode;
             const b3 = document.getElementById('btn-3d');
             const b2 = document.getElementById('btn-2d');
+            const projToggle = document.getElementById('projection-toggle');
             const meshCheckbox = document.getElementById('show-mesh');
 
             if (mode === '3d') {
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
-                activeCamera = perspectiveCamera;
+                
+                // Show toggle
+                projToggle.classList.remove('hidden');
+                
+                if (isOrtho3D) {
+                    activeCamera = orthoCamera3D;
+                } else {
+                    activeCamera = perspectiveCamera;
+                }
+                
                 activeCamera.position.set(3, 2, 4);
                 activeCamera.lookAt(0,0,0);
                 controls.object = activeCamera;
                 controls.enabled = true;
                 controls.enableRotate = true;
                 controls.enableZoom = true;
-                meshCheckbox.checked = true;
-                visualGroup.visible = true; 
+                
+                if (renderStyle === 'mesh') {
+                    meshCheckbox.checked = true;
+                    visualGroup.visible = true; 
+                }
             } else {
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
+                
+                // Hide toggle in 2D
+                projToggle.classList.add('hidden');
+
                 activeCamera = orthoCamera;
                 activeCamera.position.set(0, 10, 0); 
                 activeCamera.lookAt(0,0,0);
@@ -999,9 +1412,47 @@
                 controls.enableRotate = false; 
                 controls.enableZoom = true;    
                 controls.enablePan = true;
-                meshCheckbox.checked = false;
-                visualGroup.visible = false; 
+                
+                if (renderStyle === 'mesh') {
+                    meshCheckbox.checked = false;
+                    visualGroup.visible = false; 
+                }
             }
+        }
+        
+        window.toggle3DProjection = function(isOrtho) {
+            isOrtho3D = isOrtho;
+            if (viewMode !== '3d') return; 
+
+            const target = controls.target.clone();
+            
+            if (isOrtho) {
+                // Switch to Ortho
+                activeCamera = orthoCamera3D;
+                // Sync View based on current perspective camera
+                const dist = perspectiveCamera.position.distanceTo(target);
+                const vFOV = perspectiveCamera.fov * Math.PI / 180;
+                const height = 2 * dist * Math.tan(vFOV / 2);
+                const width = height * perspectiveCamera.aspect;
+                
+                orthoCamera3D.left = -width / 2;
+                orthoCamera3D.right = width / 2;
+                orthoCamera3D.top = height / 2;
+                orthoCamera3D.bottom = -height / 2;
+                orthoCamera3D.zoom = 1; 
+                orthoCamera3D.updateProjectionMatrix();
+                
+                orthoCamera3D.position.copy(perspectiveCamera.position);
+                orthoCamera3D.quaternion.copy(perspectiveCamera.quaternion);
+            } else {
+                // Switch to Perspective
+                activeCamera = perspectiveCamera;
+                perspectiveCamera.position.copy(orthoCamera3D.position);
+                perspectiveCamera.quaternion.copy(orthoCamera3D.quaternion);
+            }
+            
+            controls.object = activeCamera;
+            controls.update();
         }
 
         window.setCapColor = function(hexStr) {
