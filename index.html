@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Slicer & Exporter</title>
+    <title>3D Slicer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -46,7 +46,7 @@
             <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V4.1</h1>
+                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V4.5</h1>
                 </div>
                 <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -68,7 +68,7 @@
                 <div class="space-y-2">
                     <div class="flex justify-between items-center">
                         <label class="text-xs font-bold uppercase text-gray-500">Z-Height</label>
-                        <span id="slice-val" class="text-xs font-mono text-blue-400 bg-blue-900/20 px-2 py-0.5 rounded border border-blue-900/30">0.00</span>
+                        <input type="number" id="slice-input" step="0.01" class="w-20 bg-blue-900/20 text-blue-400 text-xs font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors" value="0.00">
                     </div>
                     <input type="range" id="slice-slider" min="-1" max="1" step="0.01" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400">
                 </div>
@@ -85,6 +85,32 @@
                     <div>
                         <label class="text-xs font-bold uppercase text-gray-500 mb-1 block">Speed</label>
                         <input type="range" id="speed-slider" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    </div>
+                </div>
+
+                <!-- Orientation Controls -->
+                <div class="space-y-2 pt-2 border-t border-gray-800">
+                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="document.getElementById('orientation-controls').classList.toggle('hidden');">
+                         <label class="text-[10px] text-gray-500 uppercase font-bold hover:text-gray-300 transition-colors">Model Orientation</label>
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </div>
+                    <div id="orientation-controls" class="space-y-2 hidden pt-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold text-red-500 w-3">X</span>
+                            <input type="range" id="rot-x" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
+                            <input type="number" id="num-rot-x" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
+                            <input type="range" id="rot-y" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                            <input type="number" id="num-rot-y" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
+                            <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
+                        </div>
+                        <button onclick="resetOrientation()" class="w-full text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 mt-1 transition-colors">Reset Rotation</button>
                     </div>
                 </div>
 
@@ -142,12 +168,19 @@
 
                 <!-- Appearance -->
                 <div>
-                     <label class="text-xs font-bold uppercase text-gray-500 mb-2 block">Fill Color</label>
+                     <label class="text-xs font-bold uppercase text-gray-500 mb-2 block">Appearance</label>
+                     
+                     <!-- Show Mesh Toggle -->
+                     <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 mb-2 cursor-pointer hover:text-white">
+                        <span>Show 3D Mesh</span>
+                        <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
+                     </label>
+
                      <div class="flex flex-col gap-2">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Fill Color</label>
                         <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
                             <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
                         </div>
-                        <span class="text-[10px] text-gray-500 text-right">Click to change color</span>
                      </div>
                 </div>
 
@@ -155,17 +188,20 @@
 
                 <!-- Upload -->
                 <div>
-                    <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
+                    <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group mb-2">
                         <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Custom .GLB</span>
                         <input type="file" id="file-input" accept=".glb, .gltf" class="hidden"/>
                         <span class="text-[10px] text-gray-600 group-hover:text-gray-500">Click to browse files</span>
                     </label>
+                    <button id="btn-reset" class="w-full py-1 text-[10px] font-bold text-gray-500 hover:text-white bg-transparent border border-gray-700 hover:bg-gray-700 rounded transition-all">
+                        Reset to Default Model
+                    </button>
                 </div>
                 
                  <!-- Status -->
                  <div id="loading-status" class="text-xs text-amber-400 font-mono hidden flex items-center gap-2">
-                    <svg class="animate-spin h-3 w-3 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    <span>Loading...</span>
+                    <svg id="loading-spinner" class="animate-spin h-3 w-3 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span id="status-text">Loading...</span>
                 </div>
             </div>
         </div>
@@ -195,6 +231,9 @@
         let scene, renderer, controls;
         let perspectiveCamera, orthoCamera, activeCamera;
         let visualGroup, stencilGroup, capGroup;
+        // WRAPPERS for Rotation
+        let activeWrappers = { visual: null, back: null, front: null };
+        
         let clippingPlane;
         let capMesh;
         let frameHelper; 
@@ -233,7 +272,6 @@
             activeCamera = perspectiveCamera;
 
             // 3. Renderer
-            // NOTE: preserveDrawingBuffer is essential for capture
             renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -332,32 +370,71 @@
         function loadModel(url) {
             const loader = new THREE.GLTFLoader();
             const status = document.getElementById('loading-status');
+            const statusText = document.getElementById('status-text');
+            const spinner = document.getElementById('loading-spinner');
+            
+            // Reset Status UI
             status.classList.remove('hidden');
+            statusText.classList.remove('text-red-500');
+            statusText.classList.add('text-amber-400');
+            spinner.classList.remove('hidden');
+            statusText.textContent = "Loading...";
 
             loader.load(url, (gltf) => {
+                // Clear Old
                 while(visualGroup.children.length > 0) visualGroup.remove(visualGroup.children[0]);
                 while(stencilGroup.children.length > 0) stencilGroup.remove(stencilGroup.children[0]);
+                
+                // Clear wrappers reference
+                activeWrappers = { visual: null, back: null, front: null };
 
                 const root = gltf.scene;
                 
-                // Centering
-                const box = new THREE.Box3().setFromObject(root);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-
-                root.position.x = -center.x;
-                root.position.y = -center.y;
-                root.position.z = -center.z;
-                
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const scale = 2 / maxDim;
-                root.scale.set(scale, scale, scale);
+                // 1. Calculate Geometry Center & Size
+                // We do this BEFORE any transforms to get the raw bounding box
                 root.updateMatrixWorld(true);
+                const rawBox = new THREE.Box3().setFromObject(root);
+                
+                if (rawBox.isEmpty()) {
+                    statusText.textContent = "Warning: Model appears empty.";
+                    return; 
+                }
 
-                // Clone for Stencil
-                const stencilBackRoot = root.clone();
-                const stencilFrontRoot = root.clone();
+                const center = rawBox.getCenter(new THREE.Vector3());
+                const size = rawBox.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
+                const scale = 2 / maxDim;
 
+                // 2. Create Pivot Wrappers
+                const visWrapper = new THREE.Group();
+                root.position.copy(center).negate(); 
+                visWrapper.add(root);
+                visWrapper.scale.set(scale, scale, scale); 
+                
+                const backWrapper = new THREE.Group();
+                const backRoot = root.clone();
+                backWrapper.add(backRoot);
+                backWrapper.scale.set(scale, scale, scale);
+
+                const frontWrapper = new THREE.Group();
+                const frontRoot = root.clone();
+                frontWrapper.add(frontRoot);
+                frontWrapper.scale.set(scale, scale, scale);
+
+                // 3. Apply Materials to Stencil Clones
+                backRoot.traverse((o) => {
+                    if (o.isMesh) {
+                        o.material = backMat;
+                        o.material.clippingPlanes = [clippingPlane];
+                    }
+                });
+                frontRoot.traverse((o) => {
+                    if (o.isMesh) {
+                        o.material = frontMat;
+                        o.material.clippingPlanes = [clippingPlane];
+                    }
+                });
+                // Visual materials
                 root.traverse((o) => {
                     if (o.isMesh) {
                         o.material.clippingPlanes = [clippingPlane];
@@ -368,46 +445,102 @@
                     }
                 });
 
-                stencilBackRoot.traverse((o) => {
-                    if (o.isMesh) {
-                        o.material = backMat;
-                        o.material.clippingPlanes = [clippingPlane];
-                    }
-                });
-
-                stencilFrontRoot.traverse((o) => {
-                    if (o.isMesh) {
-                        o.material = frontMat;
-                        o.material.clippingPlanes = [clippingPlane];
-                    }
-                });
-
-                visualGroup.add(root);
-                stencilGroup.add(stencilBackRoot);
-                stencilGroup.add(stencilFrontRoot);
-
-                // Bounds
-                const buffer = 0.05; 
-                const limit = ((size.y * scale) / 2) + buffer;
-                modelBounds.min = -limit;
-                modelBounds.max = limit;
+                // 4. Add to Scene Groups
+                visualGroup.add(visWrapper);
+                stencilGroup.add(backWrapper);
+                stencilGroup.add(frontWrapper);
                 
-                const slider = document.getElementById('slice-slider');
-                slider.min = -limit;
-                slider.max = limit;
+                activeWrappers.visual = visWrapper;
+                activeWrappers.back = backWrapper;
+                activeWrappers.front = frontWrapper;
 
+                // 5. Initial Bounds Calc
+                updateBounds();
+
+                // 6. Reset Camera
+                controls.target.set(0, 0, 0);
+                controls.update();
+
+                // 7. Cleanup UI
                 status.classList.add('hidden');
-
-                if (viewMode === '2d') {
+                
+                // Visibility Logic
+                // We trust the checkbox, unless we just switched views, but let's just sync it.
+                visualGroup.visible = document.getElementById('show-mesh').checked;
+                if(viewMode === '2d') {
+                    // Convention: 2D mode usually hides it, so maybe force checkbox off?
+                    // Let's force it off for cleanliness on load if in 2D mode.
+                    document.getElementById('show-mesh').checked = false;
                     visualGroup.visible = false;
                 }
-
+                
+                resetOrientationUI();
                 updateFrameHelper(); 
 
             }, undefined, (e) => {
                 console.error(e);
-                status.textContent = "Error loading model";
+                statusText.textContent = "Error loading model.";
+                statusText.classList.remove('text-amber-400');
+                statusText.classList.add('text-red-500');
+                spinner.classList.add('hidden'); 
             });
+        }
+        
+        function updateBounds() {
+            if (!activeWrappers.visual) return;
+            
+            activeWrappers.visual.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(activeWrappers.visual);
+            
+            const height = box.max.y - box.min.y;
+            const buffer = height * 0.1;
+            
+            modelBounds.min = box.min.y - buffer;
+            modelBounds.max = box.max.y + buffer;
+            
+            const slider = document.getElementById('slice-slider');
+            slider.min = modelBounds.min;
+            slider.max = modelBounds.max;
+            slider.step = height / 1000;
+        }
+
+        function updateOrientation() {
+            if (!activeWrappers.visual) return;
+            
+            const rx = parseFloat(document.getElementById('rot-x').value) * (Math.PI / 180);
+            const ry = parseFloat(document.getElementById('rot-y').value) * (Math.PI / 180);
+            const rz = parseFloat(document.getElementById('rot-z').value) * (Math.PI / 180);
+            
+            const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
+            
+            activeWrappers.visual.rotation.copy(euler);
+            activeWrappers.back.rotation.copy(euler);
+            activeWrappers.front.rotation.copy(euler);
+            
+            updateBounds();
+            
+            if (!isAnimate) {
+                const currentY = parseFloat(document.getElementById('slice-slider').value);
+                updatePlaneHeight(currentY);
+            }
+        }
+        
+        window.resetOrientation = function() {
+            resetOrientationUI();
+            updateOrientation();
+        }
+        
+        function resetOrientationUI() {
+            ['x', 'y', 'z'].forEach(axis => {
+                document.getElementById(`rot-${axis}`).value = 0;
+                document.getElementById(`num-rot-${axis}`).value = 0;
+            });
+        }
+        
+        window.toggleMesh = function(visible) {
+            if (visualGroup) {
+                visualGroup.visible = visible;
+            }
         }
 
         // --- HELPER LOGIC ---
@@ -432,7 +565,6 @@
             if (!isProcessingVideo) {
                 requestAnimationFrame(animate);
                 
-                // Standard Playback
                 if (isAnimate && visualGroup.children.length > 0) {
                     time += 0.01 * scanSpeed;
                     const t = (time % 2);
@@ -454,8 +586,6 @@
         // --- OFFLINE RENDERING LOGIC ---
         async function startExport() {
             if (isProcessingVideo) return;
-            
-            // Check Support
             if (typeof VideoEncoder === 'undefined') {
                 alert("Your browser does not support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16+.");
                 return;
@@ -463,21 +593,17 @@
 
             isProcessingVideo = true;
 
-            // 1. Dynamic Import of MP4 Muxer (CDN)
-            // We use a library to containerize the raw encoded frames into an MP4 file
             const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
 
             const w = parseInt(document.getElementById('export-w').value) || 1080;
             const h = parseInt(document.getElementById('export-h').value) || 1080;
-            // Ensure even dimensions for encorders
             const width = w % 2 === 0 ? w : w - 1;
             const height = h % 2 === 0 ? h : h - 1;
             
             const dur = parseInt(document.getElementById('export-duration').value) || 5;
             const fps = parseInt(document.getElementById('export-fps').value) || 60;
-            const bitrate = 10_000_000; // 10 Mbps High Quality
+            const bitrate = 10_000_000; 
 
-            // 2. Pause & Save State
             preExportState.width = window.innerWidth;
             preExportState.height = window.innerHeight;
             isAnimate = false;
@@ -486,15 +612,12 @@
             const wasFrameVisible = frameHelper.visible;
             frameHelper.visible = false; 
 
-            // 3. Setup Recording UI
             document.getElementById('rec-overlay').classList.remove('hidden');
             const percentEl = document.getElementById('rec-percentage');
             const barEl = document.getElementById('rec-progress-bar');
 
-            // 4. Setup Renderer
             renderer.setSize(width, height);
             
-            // 5. Setup Camera (Ortho)
             activeCamera = orthoCamera;
             const aspect = width / height;
             const fH = FRUSTUM_SIZE * captureScale;
@@ -508,72 +631,51 @@
             orthoCamera.position.set(0, 10, 0); 
             orthoCamera.lookAt(0, 0, 0);
             
-            visualGroup.visible = false; // Hide 3D mesh, show slice only
+            // Auto hide mesh during export
+            const wasMeshVisible = visualGroup.visible;
+            visualGroup.visible = false; 
 
-            // 6. Init Muxer
             const muxer = new Muxer({
                 target: new ArrayBufferTarget(),
-                video: {
-                    codec: 'avc', // H.264
-                    width: width,
-                    height: height
-                },
-                fastStart: 'in-memory' // Optimize for web playback
+                video: { codec: 'avc', width, height },
+                fastStart: 'in-memory'
             });
 
-            // 7. Init Encoder
             const videoEncoder = new VideoEncoder({
                 output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-                error: e => {
-                    console.error("Encoding error:", e);
-                    isProcessingVideo = false; // Stop processing on error
-                }
+                error: e => { console.error("Encoding error:", e); isProcessingVideo = false; }
             });
 
-            // Use Main Profile, Level 4.2 (avc1.4d002a) to support up to 1080p/60fps
             videoEncoder.configure({
                 codec: 'avc1.4d002a', 
-                width: width,
-                height: height,
-                bitrate: bitrate,
-                framerate: fps
+                width, height, bitrate, framerate: fps
             });
 
-            // 8. RENDER LOOP
             const totalFrames = fps * dur;
-            const frameDurationUs = 1e6 / fps; // Microseconds
+            const frameDurationUs = 1e6 / fps; 
 
             for (let i = 0; i <= totalFrames; i++) {
-                if (!isProcessingVideo || videoEncoder.state === 'closed') break; // Safety check
+                if (!isProcessingVideo || videoEncoder.state === 'closed') break; 
 
-                // Update Model
                 const progress = i / totalFrames;
                 const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
                 updatePlaneHeight(yPos);
                 
-                // Draw
                 renderer.render(scene, activeCamera);
                 
-                // Create VideoFrame from Canvas
-                // Timestamp MUST be accurate for the file to have constant FPS
                 const timestamp = i * frameDurationUs;
                 const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
                 
-                // Encode
-                // keyFrame every 60 frames (approx 1s) for seekability
                 videoEncoder.encode(frame, { keyFrame: i % 60 === 0 });
-                frame.close(); // Important: release memory immediately
+                frame.close(); 
 
-                // Update UI
                 const pct = Math.round(progress * 100) + '%';
                 percentEl.textContent = pct;
                 barEl.style.width = pct;
 
-                // Yield to browser to keep UI responsive
                 await new Promise(r => setTimeout(r, 0));
             }
 
-            // 9. Finalize
             await videoEncoder.flush();
             muxer.finalize();
 
@@ -585,19 +687,28 @@
             a.download = `slice_render_${width}x${height}_${fps}fps.mp4`;
             a.click();
 
-            // 10. Restore
-            restoreState(wasFrameVisible);
+            restoreState(wasFrameVisible, wasMeshVisible);
             isProcessingVideo = false;
             animate();
         }
 
-        function restoreState(restoreFrame) {
+        function restoreState(restoreFrame, restoreMesh) {
             renderer.setSize(preExportState.width, preExportState.height);
             onWindowResize(); 
-            
             document.getElementById('rec-overlay').classList.add('hidden');
             if(frameHelper) frameHelper.visible = restoreFrame;
             
+            // Restore visibility based on argument if provided (for export flow)
+            // or just rely on checkbox state if called from simple view switch?
+            // For export restore, we pass restoreMesh.
+            if (typeof restoreMesh !== 'undefined') {
+                visualGroup.visible = restoreMesh;
+                // Sync checkbox if it got out of sync? 
+                // Actually the checkbox wasn't changed during export, just the rendering group.
+                // But the user might be confused if the checkbox says Checked but it's hidden.
+                // In setMode, we follow the checkbox. Here we restore to what it was.
+            }
+
             if (viewMode === '3d') setMode('3d');
             else setMode('2d');
         }
@@ -606,9 +717,16 @@
             const v = parseFloat(val);
             clippingPlane.constant = v;
             capMesh.position.y = v;
+            
             if(!isProcessingVideo) {
-                document.getElementById('slice-val').textContent = v.toFixed(2);
-                document.getElementById('slice-slider').value = v;
+                const slider = document.getElementById('slice-slider');
+                if (document.activeElement !== slider) {
+                    slider.value = v;
+                }
+                const input = document.getElementById('slice-input');
+                if (document.activeElement !== input) {
+                    input.value = v.toFixed(2);
+                }
             }
         }
 
@@ -618,12 +736,40 @@
                 document.getElementById('anim-toggle').checked = false;
                 updatePlaneHeight(e.target.value);
             });
+            
+            document.getElementById('slice-input').addEventListener('input', (e) => {
+                isAnimate = false;
+                document.getElementById('anim-toggle').checked = false;
+                updatePlaneHeight(e.target.value);
+            });
+
             document.getElementById('anim-toggle').addEventListener('change', (e) => isAnimate = e.target.checked);
             document.getElementById('speed-slider').addEventListener('input', (e) => scanSpeed = parseFloat(e.target.value));
             document.getElementById('btn-3d').addEventListener('click', () => setMode('3d'));
             document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
-            
             document.getElementById('btn-export').addEventListener('click', startExport);
+            
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                loadModel(DEFAULT_MODEL);
+            });
+            
+            ['x', 'y', 'z'].forEach(axis => {
+                const slider = document.getElementById(`rot-${axis}`);
+                const number = document.getElementById(`num-rot-${axis}`);
+
+                slider.addEventListener('input', () => {
+                    number.value = slider.value;
+                    updateOrientation();
+                });
+
+                number.addEventListener('input', () => {
+                    let val = parseFloat(number.value);
+                    if (val < 0) val = 0;
+                    if (val > 360) val = 360;
+                    slider.value = val;
+                    updateOrientation();
+                });
+            });
             
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
                 captureScale = parseFloat(e.target.value);
@@ -645,39 +791,40 @@
             viewMode = mode;
             const b3 = document.getElementById('btn-3d');
             const b2 = document.getElementById('btn-2d');
+            const meshCheckbox = document.getElementById('show-mesh');
 
             if (mode === '3d') {
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
                 
                 activeCamera = perspectiveCamera;
-                
                 activeCamera.position.set(3, 2, 4);
                 activeCamera.lookAt(0,0,0);
-                
                 controls.object = activeCamera;
                 controls.enabled = true;
                 controls.enableRotate = true;
                 controls.enableZoom = true;
                 
+                // Auto-show mesh in 3D (user can hide later)
+                meshCheckbox.checked = true;
                 visualGroup.visible = true; 
             } else {
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
 
                 activeCamera = orthoCamera;
-                
                 activeCamera.position.set(0, 10, 0); 
                 activeCamera.lookAt(0,0,0);
                 activeCamera.zoom = 1; 
                 activeCamera.updateProjectionMatrix();
-
                 controls.object = activeCamera;
                 controls.enabled = true;
                 controls.enableRotate = false; 
                 controls.enableZoom = true;    
                 controls.enablePan = true;
                 
+                // Auto-hide mesh in 2D (user can show later) 
+                meshCheckbox.checked = false;
                 visualGroup.visible = false; 
             }
         }
