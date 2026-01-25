@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Slicer</title>
+    <title>3D Slicer & Exporter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -46,7 +46,7 @@
             <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V4.5</h1>
+                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V5.1</h1>
                 </div>
                 <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -152,7 +152,6 @@
                              <label class="text-[10px] text-gray-500 uppercase font-bold">Frame Scale</label>
                              <span id="zoom-val" class="text-[10px] text-blue-400 font-mono">1.0x</span>
                         </div>
-                        <!-- Range 0.2 (Tight) to 2.0 (Wide) -->
                         <input type="range" id="zoom-slider" min="0.2" max="2.0" step="0.1" value="1.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                         
                          <label class="flex items-center gap-2 cursor-pointer mt-1">
@@ -167,17 +166,33 @@
                 </div>
 
                 <!-- Appearance -->
-                <div>
-                     <label class="text-xs font-bold uppercase text-gray-500 mb-2 block">Appearance</label>
+                <div class="space-y-3">
+                     <label class="text-xs font-bold uppercase text-gray-500 block">Appearance</label>
                      
+                     <!-- Outline Controls -->
+                     <div class="bg-gray-800/50 p-2 rounded border border-gray-700 space-y-2">
+                        <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                            <span>Outline Only</span>
+                            <input type="checkbox" id="outline-mode" class="w-3 h-3 accent-purple-500 rounded bg-gray-700 border-gray-600">
+                        </label>
+                        
+                        <div id="outline-settings" class="hidden space-y-1">
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Thickness</label>
+                                <span id="outline-val" class="text-[10px] text-purple-400 font-mono">2 px</span>
+                            </div>
+                            <input type="range" id="outline-width" min="1" max="10" step="1" value="2" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                        </div>
+                     </div>
+
                      <!-- Show Mesh Toggle -->
-                     <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 mb-2 cursor-pointer hover:text-white">
+                     <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
                         <span>Show 3D Mesh</span>
                         <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
                      </label>
 
                      <div class="flex flex-col gap-2">
-                        <label class="text-[10px] font-bold text-gray-500 uppercase">Fill Color</label>
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
                         <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
                             <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
                         </div>
@@ -216,7 +231,7 @@
         <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
             <div id="rec-progress-bar" class="bg-red-500 h-1.5 rounded-full" style="width: 0%"></div>
         </div>
-        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering.</p>
+        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering. High Quality.</p>
     </div>
 
     <!-- 3D Canvas -->
@@ -230,8 +245,7 @@
         // --- VARIABLES ---
         let scene, renderer, controls;
         let perspectiveCamera, orthoCamera, activeCamera;
-        let visualGroup, stencilGroup, capGroup;
-        // WRAPPERS for Rotation
+        let visualGroup, stencilGroup, capGroup; 
         let activeWrappers = { visual: null, back: null, front: null };
         
         let clippingPlane;
@@ -244,6 +258,16 @@
         let viewMode = '3d';
         let capMaterial, backMat, frontMat;
         let isPanelOpen = true;
+        
+        // Post Processing Vars
+        let renderTarget;
+        let postScene, postCamera, postMesh;
+        let postMaterial;
+
+        // Settings
+        let outlineMode = false;
+        let outlineWidth = 2.0; // pixels
+        let sliceColor = new THREE.Color(0xffffff);
 
         // Export State
         let isProcessingVideo = false;
@@ -255,7 +279,7 @@
             const container = document.getElementById('canvas-container');
             const aspect = window.innerWidth / window.innerHeight;
 
-            // 1. Setup
+            // 1. Main Scene
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x000000); 
 
@@ -279,35 +303,112 @@
             renderer.shadowMap.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // 4. Controls
+            // 4. Render Target (For Slice Capture)
+            renderTarget = new THREE.WebGLRenderTarget(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                format: THREE.RGBAFormat,
+                stencilBuffer: true
+            });
+
+            // 5. Post-Processing Scene (For Edge Detection)
+            postScene = new THREE.Scene();
+            postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            postMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    tDiffuse: { value: null },
+                    uResolution: { value: new THREE.Vector2(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio) },
+                    uColor: { value: sliceColor },
+                    uOutlineWidth: { value: outlineWidth },
+                    uIsOutline: { value: 0 } // 0 = Solid, 1 = Outline
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D tDiffuse;
+                    uniform vec2 uResolution;
+                    uniform vec3 uColor;
+                    uniform float uOutlineWidth;
+                    uniform float uIsOutline;
+                    varying vec2 vUv;
+
+                    void main() {
+                        vec4 center = texture2D(tDiffuse, vUv);
+                        
+                        // If not outline mode, just render the slice color where alpha > 0
+                        if (uIsOutline < 0.5) {
+                            if (center.a > 0.0) {
+                                gl_FragColor = vec4(uColor, 1.0);
+                            } else {
+                                discard;
+                            }
+                            return;
+                        }
+
+                        // EDGE DETECTION (Inner Stroke)
+                        // If current pixel is Opaque...
+                        if (center.a > 0.5) {
+                            float w = uOutlineWidth;
+                            vec2 pixelSize = vec2(1.0) / uResolution;
+                            
+                            // Check neighbors at distance W
+                            // If any neighbor is Transparent, this is an edge pixel
+                            float n1 = texture2D(tDiffuse, vUv + vec2(0.0, w) * pixelSize).a;
+                            float n2 = texture2D(tDiffuse, vUv + vec2(0.0, -w) * pixelSize).a;
+                            float n3 = texture2D(tDiffuse, vUv + vec2(w, 0.0) * pixelSize).a;
+                            float n4 = texture2D(tDiffuse, vUv + vec2(-w, 0.0) * pixelSize).a;
+                            
+                            if (n1 < 0.5 || n2 < 0.5 || n3 < 0.5 || n4 < 0.5) {
+                                gl_FragColor = vec4(uColor, 1.0); // Edge
+                            } else {
+                                discard; // Inside
+                            }
+                        } else {
+                            discard; // Outside
+                        }
+                    }
+                `,
+                transparent: true,
+                depthTest: false,
+                depthWrite: false
+            });
+            postMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMaterial);
+            postScene.add(postMesh);
+
+            // 6. Controls
             controls = new THREE.OrbitControls(activeCamera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
 
-            // 5. Lights
+            // 7. Lights
             scene.add(new THREE.AmbientLight(0xffffff, 0.6));
             const dl = new THREE.DirectionalLight(0xffffff, 1.2);
             dl.position.set(5, 10, 7);
             dl.castShadow = true;
             scene.add(dl);
-            
             const rimLight = new THREE.DirectionalLight(0x4444ff, 0.5);
             rimLight.position.set(-5, 5, -5);
             scene.add(rimLight);
 
-            // 6. Clipping Plane
+            // 8. Clipping Plane
             clippingPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
 
-            // 7. Initialize Groups
+            // 9. Initialize Groups
             visualGroup = new THREE.Group();
             stencilGroup = new THREE.Group();
             capGroup = new THREE.Group();
             
-            scene.add(stencilGroup); 
+            // Stencil is hidden by default in main render, used for RTT
             scene.add(visualGroup);
+            scene.add(stencilGroup); 
             scene.add(capGroup);
 
-            // 8. Capture Frame Helper
+            // 10. Helper
             const frameGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)); 
             const frameMat = new THREE.LineBasicMaterial({ color: 0xff0000, depthTest: false, depthWrite: false });
             frameHelper = new THREE.LineSegments(frameGeo, frameMat);
@@ -315,56 +416,157 @@
             frameHelper.visible = false; 
             scene.add(frameHelper);
 
-            // 9. Materials for Stencil Logic
-            const baseStencil = new THREE.MeshBasicMaterial({
+            // 11. Materials
+            // Basic Material is safest for stencil ops
+            const stencilConfig = {
                 depthWrite: false,
                 depthTest: false,
                 colorWrite: false,
                 stencilWrite: true,
                 stencilFunc: THREE.AlwaysStencilFunc,
-                side: THREE.BackSide, 
-                clippingPlanes: [clippingPlane]
+                clippingPlanes: [clippingPlane],
+                blending: THREE.NoBlending,
+                fog: false
+            };
+
+            backMat = new THREE.MeshBasicMaterial({ 
+                ...stencilConfig, 
+                side: THREE.BackSide,
+                stencilFail: THREE.IncrementWrapStencilOp,
+                stencilZFail: THREE.IncrementWrapStencilOp,
+                stencilZPass: THREE.IncrementWrapStencilOp
             });
 
-            backMat = baseStencil.clone();
-            backMat.stencilFail = THREE.IncrementWrapStencilOp;
-            backMat.stencilZFail = THREE.IncrementWrapStencilOp;
-            backMat.stencilZPass = THREE.IncrementWrapStencilOp;
+            frontMat = new THREE.MeshBasicMaterial({ 
+                ...stencilConfig,
+                side: THREE.FrontSide,
+                stencilFail: THREE.DecrementWrapStencilOp,
+                stencilZFail: THREE.DecrementWrapStencilOp,
+                stencilZPass: THREE.DecrementWrapStencilOp
+            });
 
-            frontMat = baseStencil.clone();
-            frontMat.side = THREE.FrontSide;
-            frontMat.stencilFail = THREE.DecrementWrapStencilOp;
-            frontMat.stencilZFail = THREE.DecrementWrapStencilOp;
-            frontMat.stencilZPass = THREE.DecrementWrapStencilOp;
-
-            // 10. Cap Material (Fill)
-            capMaterial = new THREE.MeshStandardMaterial({
+            // The Cap used for the internal RTT pass - Solid White
+            capMaterial = new THREE.MeshBasicMaterial({ 
                 color: 0xffffff, 
-                metalness: 0.1,
-                roughness: 0.1,
                 stencilWrite: true,
                 stencilRef: 0,
-                stencilFunc: THREE.NotEqualStencilFunc,
+                stencilFunc: THREE.NotEqualStencilFunc, 
                 stencilFail: THREE.KeepStencilOp,
                 stencilZFail: THREE.KeepStencilOp,
                 stencilZPass: THREE.KeepStencilOp,
                 side: THREE.DoubleSide
             });
 
-            // 11. Cap Mesh
             const planeGeom = new THREE.PlaneGeometry(100, 100);
             capMesh = new THREE.Mesh(planeGeom, capMaterial);
             capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
-            capMesh.renderOrder = 1;
+            capMesh.renderOrder = 999; 
             capGroup.add(capMesh);
 
-            // 12. Load
+            // Load
             loadModel(DEFAULT_MODEL);
 
-            // 13. Events
+            // Events
             window.addEventListener('resize', onWindowResize);
             setupUI();
-            animate();
+            
+            // Start Loop
+            renderer.setAnimationLoop(renderFrame);
+        }
+
+        // --- CORE RENDER FUNCTION ---
+        // Handles Multi-Pass Rendering
+        function renderFrame() {
+            if(isProcessingVideo) return; // Video loop handles itself
+
+            if (isAnimate && visualGroup.children.length > 0) {
+                time += 0.01 * scanSpeed;
+                const t = (time % 2);
+                const alpha = t < 1 ? t : 2 - t; 
+                const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, alpha);
+                updatePlaneHeight(yPos);
+            }
+            
+            if(frameHelper.visible) {
+                frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value);
+            }
+
+            controls.update();
+            performMultiPassRender();
+        }
+
+        function performMultiPassRender() {
+            // 1. PREP: Stencil Pass (Render slice to Texture)
+            
+            // Save state
+            const currentBg = scene.background;
+            const visVisible = visualGroup.visible;
+            
+            // Setup for Mask Pass
+            scene.background = null; // Transparent background for texture
+            visualGroup.visible = false; // Hide 3D model
+            stencilGroup.visible = true; // Show Stencil Calc
+            capGroup.visible = true;     // Show Cap
+            frameHelper.visible = false; // Don't render helper to texture
+
+            // Render to Target
+            renderer.setRenderTarget(renderTarget);
+            renderer.clear();
+            renderer.render(scene, activeCamera);
+            
+            // 2. COMPOSITE: Screen Pass
+            
+            // Restore State for Screen
+            renderer.setRenderTarget(null);
+            scene.background = currentBg;
+            visualGroup.visible = visVisible; 
+            stencilGroup.visible = false; // Hide stencil logic from screen
+            capGroup.visible = false;     // Hide raw cap (we use post-process result)
+            frameHelper.visible = document.getElementById('show-frame').checked;
+
+            // Render 3D Model First
+            renderer.clear();
+            if(visVisible) {
+                renderer.render(scene, activeCamera);
+            }
+
+            // Render Slice Overlay (Post Process Quad)
+            // This draws the slice outline/fill on top
+            postMaterial.uniforms.tDiffuse.value = renderTarget.texture;
+            postMaterial.uniforms.uIsOutline.value = outlineMode ? 1 : 0;
+            
+            // Don't clear, just draw on top
+            renderer.autoClear = false;
+            renderer.render(postScene, postCamera);
+            renderer.autoClear = true;
+            
+            // Render UI Helper on top of everything
+            if(frameHelper.visible) {
+                // If the main mesh was visible, the helper was already drawn in the first pass.
+                // If the main mesh was HIDDEN, we haven't drawn the helper yet.
+                
+                if(!visVisible) {
+                    // We need to draw the helper separately
+                    visualGroup.visible = false;
+                    stencilGroup.visible = false;
+                    capGroup.visible = false;
+                    
+                    // FIX: Temporarily remove background so we don't erase the slice we just drew
+                    scene.background = null; 
+                    
+                    renderer.autoClear = false;
+                    renderer.render(scene, activeCamera);
+                    renderer.autoClear = true;
+                    
+                    // Restore background for next frame
+                    scene.background = currentBg;
+                }
+            }
+            
+            // Restore visibility for next frame logic / controls interactions
+            visualGroup.visible = visVisible;
+            stencilGroup.visible = true; // Reset for next loop
+            capGroup.visible = true;
         }
 
         function loadModel(url) {
@@ -373,7 +575,6 @@
             const statusText = document.getElementById('status-text');
             const spinner = document.getElementById('loading-spinner');
             
-            // Reset Status UI
             status.classList.remove('hidden');
             statusText.classList.remove('text-red-500');
             statusText.classList.add('text-amber-400');
@@ -381,17 +582,12 @@
             statusText.textContent = "Loading...";
 
             loader.load(url, (gltf) => {
-                // Clear Old
                 while(visualGroup.children.length > 0) visualGroup.remove(visualGroup.children[0]);
                 while(stencilGroup.children.length > 0) stencilGroup.remove(stencilGroup.children[0]);
                 
-                // Clear wrappers reference
                 activeWrappers = { visual: null, back: null, front: null };
 
                 const root = gltf.scene;
-                
-                // 1. Calculate Geometry Center & Size
-                // We do this BEFORE any transforms to get the raw bounding box
                 root.updateMatrixWorld(true);
                 const rawBox = new THREE.Box3().setFromObject(root);
                 
@@ -405,7 +601,7 @@
                 const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
                 const scale = 2 / maxDim;
 
-                // 2. Create Pivot Wrappers
+                // Wrappers
                 const visWrapper = new THREE.Group();
                 root.position.copy(center).negate(); 
                 visWrapper.add(root);
@@ -421,19 +617,18 @@
                 frontWrapper.add(frontRoot);
                 frontWrapper.scale.set(scale, scale, scale);
 
-                // 3. Apply Materials to Stencil Clones
-                backRoot.traverse((o) => {
-                    if (o.isMesh) {
-                        o.material = backMat;
-                        o.material.clippingPlanes = [clippingPlane];
-                    }
-                });
-                frontRoot.traverse((o) => {
-                    if (o.isMesh) {
-                        o.material = frontMat;
-                        o.material.clippingPlanes = [clippingPlane];
-                    }
-                });
+                // Setup Stencil
+                const setupStencil = (mesh, mat) => {
+                    mesh.material = mat;
+                    mesh.material.clippingPlanes = [clippingPlane];
+                    mesh.castShadow = false;
+                    mesh.receiveShadow = false;
+                    mesh.frustumCulled = false; 
+                };
+
+                backRoot.traverse((o) => { if (o.isMesh) setupStencil(o, backMat); });
+                frontRoot.traverse((o) => { if (o.isMesh) setupStencil(o, frontMat); });
+
                 // Visual materials
                 root.traverse((o) => {
                     if (o.isMesh) {
@@ -445,7 +640,6 @@
                     }
                 });
 
-                // 4. Add to Scene Groups
                 visualGroup.add(visWrapper);
                 stencilGroup.add(backWrapper);
                 stencilGroup.add(frontWrapper);
@@ -454,23 +648,16 @@
                 activeWrappers.back = backWrapper;
                 activeWrappers.front = frontWrapper;
 
-                // 5. Initial Bounds Calc
                 updateBounds();
-
-                // 6. Reset Camera
                 controls.target.set(0, 0, 0);
                 controls.update();
 
-                // 7. Cleanup UI
                 status.classList.add('hidden');
                 
-                // Visibility Logic
-                // We trust the checkbox, unless we just switched views, but let's just sync it.
-                visualGroup.visible = document.getElementById('show-mesh').checked;
+                const meshCheck = document.getElementById('show-mesh');
+                visualGroup.visible = meshCheck.checked;
                 if(viewMode === '2d') {
-                    // Convention: 2D mode usually hides it, so maybe force checkbox off?
-                    // Let's force it off for cleanliness on load if in 2D mode.
-                    document.getElementById('show-mesh').checked = false;
+                    meshCheck.checked = false;
                     visualGroup.visible = false;
                 }
                 
@@ -488,16 +675,12 @@
         
         function updateBounds() {
             if (!activeWrappers.visual) return;
-            
             activeWrappers.visual.updateMatrixWorld(true);
             const box = new THREE.Box3().setFromObject(activeWrappers.visual);
-            
             const height = box.max.y - box.min.y;
             const buffer = height * 0.1;
-            
             modelBounds.min = box.min.y - buffer;
             modelBounds.max = box.max.y + buffer;
-            
             const slider = document.getElementById('slice-slider');
             slider.min = modelBounds.min;
             slider.max = modelBounds.max;
@@ -506,11 +689,9 @@
 
         function updateOrientation() {
             if (!activeWrappers.visual) return;
-            
             const rx = parseFloat(document.getElementById('rot-x').value) * (Math.PI / 180);
             const ry = parseFloat(document.getElementById('rot-y').value) * (Math.PI / 180);
             const rz = parseFloat(document.getElementById('rot-z').value) * (Math.PI / 180);
-            
             const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
             
             activeWrappers.visual.rotation.copy(euler);
@@ -518,7 +699,6 @@
             activeWrappers.front.rotation.copy(euler);
             
             updateBounds();
-            
             if (!isAnimate) {
                 const currentY = parseFloat(document.getElementById('slice-slider').value);
                 updatePlaneHeight(currentY);
@@ -538,68 +718,43 @@
         }
         
         window.toggleMesh = function(visible) {
-            if (visualGroup) {
-                visualGroup.visible = visible;
-            }
+            if (visualGroup) visualGroup.visible = visible;
+        }
+        
+        window.toggleOutlineMode = function(isOutline) {
+            outlineMode = isOutline;
+            const settings = document.getElementById('outline-settings');
+            if(isOutline) settings.classList.remove('hidden');
+            else settings.classList.add('hidden');
         }
 
-        // --- HELPER LOGIC ---
         function updateFrameHelper() {
             if (!frameHelper) return;
-
             const w = parseInt(document.getElementById('export-w').value) || 1080;
             const h = parseInt(document.getElementById('export-h').value) || 1080;
             const aspect = w / h;
-            
             const visHeight = FRUSTUM_SIZE * captureScale;
             const visWidth = visHeight * aspect;
-
             frameHelper.scale.set(visWidth, visHeight, 1);
-            
             frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value) || 0;
             frameHelper.visible = document.getElementById('show-frame').checked;
         }
 
-        // --- ANIMATION ---
-        function animate() {
-            if (!isProcessingVideo) {
-                requestAnimationFrame(animate);
-                
-                if (isAnimate && visualGroup.children.length > 0) {
-                    time += 0.01 * scanSpeed;
-                    const t = (time % 2);
-                    const alpha = t < 1 ? t : 2 - t; 
-                    const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, alpha);
-                    updatePlaneHeight(yPos);
-                    document.getElementById('slice-slider').value = yPos;
-                }
-                
-                if(frameHelper.visible) {
-                    frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value);
-                }
-
-                controls.update();
-                renderer.render(scene, activeCamera);
-            }
-        }
-
-        // --- OFFLINE RENDERING LOGIC ---
+        // --- OFFLINE RENDERING LOGIC (Updated to use Multi-Pass) ---
         async function startExport() {
             if (isProcessingVideo) return;
             if (typeof VideoEncoder === 'undefined') {
-                alert("Your browser does not support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16+.");
+                alert("Your browser does not support WebCodecs.");
                 return;
             }
 
             isProcessingVideo = true;
-
             const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
 
             const w = parseInt(document.getElementById('export-w').value) || 1080;
             const h = parseInt(document.getElementById('export-h').value) || 1080;
             const width = w % 2 === 0 ? w : w - 1;
             const height = h % 2 === 0 ? h : h - 1;
-            
             const dur = parseInt(document.getElementById('export-duration').value) || 5;
             const fps = parseInt(document.getElementById('export-fps').value) || 60;
             const bitrate = 10_000_000; 
@@ -616,8 +771,11 @@
             const percentEl = document.getElementById('rec-percentage');
             const barEl = document.getElementById('rec-progress-bar');
 
+            // Resize everything for export
             renderer.setSize(width, height);
-            
+            renderTarget.setSize(width, height); // IMPORTANT
+            postMaterial.uniforms.uResolution.value.set(width, height); // Update shader resolution
+
             activeCamera = orthoCamera;
             const aspect = width / height;
             const fH = FRUSTUM_SIZE * captureScale;
@@ -635,21 +793,12 @@
             const wasMeshVisible = visualGroup.visible;
             visualGroup.visible = false; 
 
-            const muxer = new Muxer({
-                target: new ArrayBufferTarget(),
-                video: { codec: 'avc', width, height },
-                fastStart: 'in-memory'
-            });
-
+            const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width, height }, fastStart: 'in-memory' });
             const videoEncoder = new VideoEncoder({
                 output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
                 error: e => { console.error("Encoding error:", e); isProcessingVideo = false; }
             });
-
-            videoEncoder.configure({
-                codec: 'avc1.4d002a', 
-                width, height, bitrate, framerate: fps
-            });
+            videoEncoder.configure({ codec: 'avc1.4d002a', width, height, bitrate, framerate: fps });
 
             const totalFrames = fps * dur;
             const frameDurationUs = 1e6 / fps; 
@@ -661,11 +810,11 @@
                 const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
                 updatePlaneHeight(yPos);
                 
-                renderer.render(scene, activeCamera);
+                // Use the shared multi-pass logic
+                performMultiPassRender();
                 
                 const timestamp = i * frameDurationUs;
                 const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
-                
                 videoEncoder.encode(frame, { keyFrame: i % 60 === 0 });
                 frame.close(); 
 
@@ -689,7 +838,6 @@
 
             restoreState(wasFrameVisible, wasMeshVisible);
             isProcessingVideo = false;
-            animate();
         }
 
         function restoreState(restoreFrame, restoreMesh) {
@@ -697,36 +845,24 @@
             onWindowResize(); 
             document.getElementById('rec-overlay').classList.add('hidden');
             if(frameHelper) frameHelper.visible = restoreFrame;
+            if (typeof restoreMesh !== 'undefined') visualGroup.visible = restoreMesh;
+            // Sync checkbox
+            document.getElementById('show-mesh').checked = visualGroup.visible;
             
-            // Restore visibility based on argument if provided (for export flow)
-            // or just rely on checkbox state if called from simple view switch?
-            // For export restore, we pass restoreMesh.
-            if (typeof restoreMesh !== 'undefined') {
-                visualGroup.visible = restoreMesh;
-                // Sync checkbox if it got out of sync? 
-                // Actually the checkbox wasn't changed during export, just the rendering group.
-                // But the user might be confused if the checkbox says Checked but it's hidden.
-                // In setMode, we follow the checkbox. Here we restore to what it was.
-            }
-
-            if (viewMode === '3d') setMode('3d');
-            else setMode('2d');
+            if (viewMode === '3d') setMode('3d'); else setMode('2d');
         }
 
         function updatePlaneHeight(val) {
             const v = parseFloat(val);
             clippingPlane.constant = v;
+            // No offset needed for post-process overlay
             capMesh.position.y = v;
             
             if(!isProcessingVideo) {
                 const slider = document.getElementById('slice-slider');
-                if (document.activeElement !== slider) {
-                    slider.value = v;
-                }
+                if (document.activeElement !== slider) slider.value = v;
                 const input = document.getElementById('slice-input');
-                if (document.activeElement !== input) {
-                    input.value = v.toFixed(2);
-                }
+                if (document.activeElement !== input) input.value = v.toFixed(2);
             }
         }
 
@@ -736,52 +872,45 @@
                 document.getElementById('anim-toggle').checked = false;
                 updatePlaneHeight(e.target.value);
             });
-            
             document.getElementById('slice-input').addEventListener('input', (e) => {
                 isAnimate = false;
                 document.getElementById('anim-toggle').checked = false;
                 updatePlaneHeight(e.target.value);
             });
-
             document.getElementById('anim-toggle').addEventListener('change', (e) => isAnimate = e.target.checked);
             document.getElementById('speed-slider').addEventListener('input', (e) => scanSpeed = parseFloat(e.target.value));
             document.getElementById('btn-3d').addEventListener('click', () => setMode('3d'));
             document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
             document.getElementById('btn-export').addEventListener('click', startExport);
-            
-            document.getElementById('btn-reset').addEventListener('click', () => {
-                loadModel(DEFAULT_MODEL);
-            });
+            document.getElementById('btn-reset').addEventListener('click', () => loadModel(DEFAULT_MODEL));
             
             ['x', 'y', 'z'].forEach(axis => {
                 const slider = document.getElementById(`rot-${axis}`);
                 const number = document.getElementById(`num-rot-${axis}`);
-
-                slider.addEventListener('input', () => {
-                    number.value = slider.value;
-                    updateOrientation();
-                });
-
+                slider.addEventListener('input', () => { number.value = slider.value; updateOrientation(); });
                 number.addEventListener('input', () => {
                     let val = parseFloat(number.value);
-                    if (val < 0) val = 0;
-                    if (val > 360) val = 360;
-                    slider.value = val;
-                    updateOrientation();
+                    if (val < 0) val = 0; if (val > 360) val = 360;
+                    slider.value = val; updateOrientation();
                 });
             });
             
+            document.getElementById('outline-mode').addEventListener('change', (e) => toggleOutlineMode(e.target.checked));
+            document.getElementById('outline-width').addEventListener('input', (e) => {
+                outlineWidth = parseFloat(e.target.value);
+                postMaterial.uniforms.uOutlineWidth.value = outlineWidth;
+                document.getElementById('outline-val').textContent = outlineWidth.toFixed(0) + ' px';
+            });
+
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
                 captureScale = parseFloat(e.target.value);
                 document.getElementById('zoom-val').textContent = captureScale.toFixed(1) + 'x';
                 document.getElementById('show-frame').checked = true;
                 updateFrameHelper();
             });
-            
             document.getElementById('show-frame').addEventListener('change', updateFrameHelper);
             document.getElementById('export-w').addEventListener('input', updateFrameHelper);
             document.getElementById('export-h').addEventListener('input', updateFrameHelper);
-
             document.getElementById('file-input').addEventListener('change', (e) => {
                 if(e.target.files[0]) loadModel(URL.createObjectURL(e.target.files[0]));
             });
@@ -796,7 +925,6 @@
             if (mode === '3d') {
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
-                
                 activeCamera = perspectiveCamera;
                 activeCamera.position.set(3, 2, 4);
                 activeCamera.lookAt(0,0,0);
@@ -804,14 +932,11 @@
                 controls.enabled = true;
                 controls.enableRotate = true;
                 controls.enableZoom = true;
-                
-                // Auto-show mesh in 3D (user can hide later)
                 meshCheckbox.checked = true;
                 visualGroup.visible = true; 
             } else {
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
-
                 activeCamera = orthoCamera;
                 activeCamera.position.set(0, 10, 0); 
                 activeCamera.lookAt(0,0,0);
@@ -822,15 +947,14 @@
                 controls.enableRotate = false; 
                 controls.enableZoom = true;    
                 controls.enablePan = true;
-                
-                // Auto-hide mesh in 2D (user can show later) 
                 meshCheckbox.checked = false;
                 visualGroup.visible = false; 
             }
         }
 
         window.setCapColor = function(hexStr) {
-            capMaterial.color.setStyle(hexStr);
+            sliceColor.set(hexStr);
+            postMaterial.uniforms.uColor.value.set(hexStr);
         }
         
         window.togglePanel = function() {
@@ -850,10 +974,8 @@
             const w = window.innerWidth;
             const h = window.innerHeight;
             const aspect = w / h;
-
             perspectiveCamera.aspect = aspect;
             perspectiveCamera.updateProjectionMatrix();
-
             const fH = FRUSTUM_SIZE; 
             const fW = fH * aspect;
             orthoCamera.left = -fW / 2;
@@ -861,8 +983,10 @@
             orthoCamera.top = fH / 2;
             orthoCamera.bottom = -fH / 2;
             orthoCamera.updateProjectionMatrix();
-
+            
             renderer.setSize(w, h);
+            renderTarget.setSize(w * window.devicePixelRatio, h * window.devicePixelRatio);
+            postMaterial.uniforms.uResolution.value.set(w * window.devicePixelRatio, h * window.devicePixelRatio);
             
             updateFrameHelper();
         }
