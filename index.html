@@ -6,6 +6,9 @@
     <title>3D Slicer & Exporter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -17,6 +20,7 @@
         
         /* Custom Color Picker Styling */
         input[type="color"] {
+            appearance: none;
             -webkit-appearance: none;
             border: none;
             padding: 0;
@@ -129,7 +133,7 @@
                     <div class="flex justify-between items-center">
                          <label class="text-xs font-bold uppercase text-red-400 flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                            Export Video (MP4)
+                            Export
                         </label>
                     </div>
                     
@@ -145,6 +149,14 @@
                                 <option value="60" selected>60</option>
                             </select>
                         </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Format</label>
+                        <select id="export-format" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
+                            <option value="mp4" selected>MP4 Video</option>
+                            <option value="png-sequence">PNG Frame Sequence (.zip)</option>
+                        </select>
                     </div>
 
                     <div>
@@ -171,7 +183,7 @@
                     </div>
 
                     <button id="btn-export" class="w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
-                        <span>Offline Render (MP4)</span>
+                        <span id="export-button-label">Offline Render (MP4)</span>
                     </button>
                 </div>
 
@@ -181,12 +193,12 @@
                      
                      <!-- Render Style Switch -->
                      <div class="bg-gray-800/50 p-1 rounded flex gap-1">
-                         <button id="style-mesh" class="flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('mesh')">Solid Mesh</button>
-                         <button id="style-points" class="flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('points')">Point Cloud</button>
+                         <button id="style-mesh" class="flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('mesh')">Solid Mesh</button>
+                         <button id="style-points" class="flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('points')">Point Cloud</button>
                      </div>
 
                      <!-- Mesh Options -->
-                     <div id="mesh-options" class="space-y-3">
+                     <div id="mesh-options" class="hidden space-y-3">
                          <div id="outline-controls" class="bg-gray-800/50 p-2 rounded border border-gray-700 space-y-2">
                             <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
                                 <span>Outline Only</span>
@@ -214,29 +226,28 @@
                          </div>
                      </div>
                      
-                     <!-- Point Options (Hidden by default) -->
-                     <div id="point-options" class="hidden space-y-3">
+                     <!-- Point Options -->
+                     <div id="point-options" class="space-y-3">
                          <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Point Size</label>
-                                <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.5</span>
+                                <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.16</span>
                             </div>
-                            <!-- Point Size Range: 0.01 - 2.0 -->
-                            <input type="range" id="point-size" min="0.01" max="2.0" step="0.01" value="0.5" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-size" min="0.02" max="1.0" step="0.005" value="0.16" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                          <div>
                             <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Density</label>
-                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">40%</span>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Preview Density</label>
+                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">100%</span>
                             </div>
-                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="0.4" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="1.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                          <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Thickness</label>
-                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.01</span>
+                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.020</span>
                             </div>
-                            <input type="range" id="point-thick" min="0.001" max="0.1" step="0.001" value="0.01" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-thick" min="0.002" max="0.08" step="0.001" value="0.02" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                      </div>
                 </div>
@@ -245,10 +256,18 @@
 
                 <!-- Upload -->
                 <div>
+                    <div class="mb-2">
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Import As</label>
+                        <select id="import-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none">
+                            <option value="auto" selected>Auto Detect</option>
+                            <option value="mesh">Mesh Surface</option>
+                            <option value="points">Point Cloud</option>
+                        </select>
+                    </div>
                     <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group mb-2">
-                        <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Custom .GLB</span>
-                        <input type="file" id="file-input" accept=".glb, .gltf" class="hidden"/>
-                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">Click to browse files</span>
+                        <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Model or Point Cloud</span>
+                        <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply" class="hidden"/>
+                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">GLB, GLTF, OBJ, STL, PLY</span>
                     </label>
                     <button id="btn-reset" class="w-full py-1 text-[10px] font-bold text-gray-500 hover:text-white bg-transparent border border-gray-700 hover:bg-gray-700 rounded transition-all">
                         Reset to Default Model
@@ -282,8 +301,16 @@
     <script>
         // --- CONSTANTS ---
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
-        const FRUSTUM_SIZE = 3.0; 
-        const MAX_POINTS = 1000000; // Increased to 1 Million
+        const FRUSTUM_SIZE = 3.0;
+        const MAX_POINTS = 5000000;
+        const DEFAULT_POINT_SIZE = 0.16;
+        const POINT_SIZE_MIN = 0.02;
+        const POINT_SIZE_MAX = 1.0;
+        const DEFAULT_POINT_DENSITY = 1.0;
+        const EXPORT_POINT_DENSITY = 1.0;
+        const DEFAULT_SLICE_THICKNESS = 0.02;
+        const SLICE_THICKNESS_MIN = 0.002;
+        const SLICE_THICKNESS_MAX = 0.08;
 
         // --- VARIABLES ---
         let scene, renderer, controls;
@@ -304,12 +331,11 @@
         let time = 0;
         let modelBounds = { min: -1, max: 1 };
         let viewMode = '3d';
-        let renderStyle = 'mesh'; 
+        let renderStyle = 'points';
         let isOrtho3D = false; // Toggle state for 3D projection
         
         let capMaterial, backMat, frontMat;
         let pointMaterials = []; 
-        let pointCountPercent = 0.4;
         let isPanelOpen = true;
         
         // Post Processing Vars
@@ -323,13 +349,76 @@
         let sliceColor = new THREE.Color(0xffffff);
         
         // Point Settings
-        let pointSize = 0.5;
-        let sliceThickness = 0.01;
+        let pointSize = DEFAULT_POINT_SIZE;
+        let pointDrawFraction = DEFAULT_POINT_DENSITY;
+        let sliceThickness = DEFAULT_SLICE_THICKNESS;
 
         // Export State
         let isProcessingVideo = false;
         let captureScale = 1.0; 
         let preExportState = { width: 0, height: 0, pixelRatio: 1 };
+        let activeUploadUrl = null;
+        let activeDownloadUrl = null;
+        let modelLoadId = 0;
+
+        function finiteNumber(value, fallback = 0) {
+            const parsed = Number.parseFloat(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
+        function finiteInteger(value, fallback = 0) {
+            const parsed = Number.parseInt(value, 10);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function evenPositiveInteger(value, fallback) {
+            const next = Math.max(2, finiteInteger(value, fallback));
+            return next % 2 === 0 ? next : next - 1;
+        }
+
+        function revokeBlobUrl(url) {
+            if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+        }
+
+        function revokeActiveUploadUrl() {
+            revokeBlobUrl(activeUploadUrl);
+            activeUploadUrl = null;
+        }
+
+        function disposeMaterial(material) {
+            if (!material || material === backMat || material === frontMat || material === capMaterial || material === postMaterial) return;
+            Object.keys(material).forEach((key) => {
+                const value = material[key];
+                if (value && value.isTexture) value.dispose();
+            });
+            material.dispose();
+        }
+
+        function disposeObject(object) {
+            object.traverse((node) => {
+                if (node.geometry) node.geometry.dispose();
+                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                materials.forEach(disposeMaterial);
+            });
+        }
+
+        function clearGroup(group) {
+            while (group.children.length > 0) {
+                const child = group.children[group.children.length - 1];
+                group.remove(child);
+                disposeObject(child);
+            }
+        }
+
+        function disposeRenderTarget() {
+            if (!renderTarget) return;
+            renderTarget.dispose();
+            renderTarget = null;
+        }
 
         // --- INIT ---
         function init() {
@@ -366,7 +455,6 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.localClippingEnabled = true; 
             renderer.shadowMap.enabled = true;
-            console.log("Max Texture Size:", renderer.capabilities.maxTextureSize);
             container.appendChild(renderer.domElement);
 
             // 4. Render Target
@@ -555,7 +643,7 @@
             }
             
             if(frameHelper.visible) {
-                frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value);
+                frameHelper.position.y = finiteNumber(document.getElementById('slice-slider').value, frameHelper.position.y);
             }
 
             controls.update();
@@ -620,24 +708,27 @@
         }
 
         // --- CUSTOM POINT SHADER ---
-        const createPointMaterial = (texture, color) => {
+        const createPointMaterial = (texture, color, hasVertexColors = false, hasUv = false) => {
+            const useTexture = !!texture && hasUv;
             return new THREE.ShaderMaterial({
                 uniforms: {
                     map: { value: texture || null },
                     size: { value: pointSize },
                     diffuse: { value: new THREE.Color(color) },
-                    hasTexture: { value: texture ? 1 : 0 },
                     uIsOrtho: { value: 0.0 },
                     uOrthoZoom: { value: 1.0 }
                 },
                 vertexShader: `
+                    ${hasVertexColors ? 'attribute vec3 color;' : ''}
                     uniform float size;
                     uniform float uIsOrtho;
                     uniform float uOrthoZoom;
-                    varying vec2 vUv;
+                    ${useTexture ? 'varying vec2 vUv;' : ''}
+                    ${hasVertexColors ? 'varying vec3 vColor;' : ''}
                     #include <clipping_planes_pars_vertex>
                     void main() {
-                        vUv = uv;
+                        ${useTexture ? 'vUv = uv;' : ''}
+                        ${hasVertexColors ? 'vColor = color;' : ''}
                         vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
                         
                         if (uIsOrtho > 0.5) {
@@ -653,18 +744,17 @@
                     }
                 `,
                 fragmentShader: `
-                    uniform sampler2D map;
+                    ${useTexture ? 'uniform sampler2D map;' : ''}
                     uniform vec3 diffuse;
-                    uniform float hasTexture;
-                    varying vec2 vUv;
+                    ${useTexture ? 'varying vec2 vUv;' : ''}
+                    ${hasVertexColors ? 'varying vec3 vColor;' : ''}
                     #include <clipping_planes_pars_fragment>
                     void main() {
                         #include <clipping_planes_fragment>
                         
                         vec4 color = vec4(diffuse, 1.0);
-                        if(hasTexture > 0.5) {
-                            color *= texture2D(map, vUv);
-                        }
+                        ${hasVertexColors ? 'color *= vec4(vColor, 1.0);' : ''}
+                        ${useTexture ? 'color *= texture2D(map, vUv);' : ''}
                         
                         // Round Point
                         vec2 cxy = 2.0 * gl_PointCoord - 1.0;
@@ -682,23 +772,26 @@
         // --- SAMPLER UTILS ---
         function createSamplingGeometry(mesh, count) {
             const geom = mesh.geometry;
-            if(!geom.index) return geom.clone(); 
-            
             const posAttr = geom.attributes.position;
+            if (!posAttr || count <= 0) return new THREE.BufferGeometry();
+
             const uvAttr = geom.attributes.uv;
+            const colorAttr = geom.attributes.color;
             const indexAttr = geom.index;
-            const faces = indexAttr.count / 3;
+            const faces = Math.floor((indexAttr ? indexAttr.count : posAttr.count) / 3);
+            if (faces <= 0) return new THREE.BufferGeometry();
             
             const areas = new Float32Array(faces);
             let totalArea = 0;
             const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
             const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+            const vertexIndex = (offset) => indexAttr ? indexAttr.getX(offset) : offset;
             
             for(let i=0; i<faces; i++) {
                 const i3 = i*3;
-                const a = indexAttr.getX(i3);
-                const b = indexAttr.getX(i3+1);
-                const c = indexAttr.getX(i3+2);
+                const a = vertexIndex(i3);
+                const b = vertexIndex(i3+1);
+                const c = vertexIndex(i3+2);
                 
                 va.fromBufferAttribute(posAttr, a);
                 vb.fromBufferAttribute(posAttr, b);
@@ -710,9 +803,12 @@
                 areas[i] = area;
                 totalArea += area;
             }
-            
+
+            if (totalArea <= 0) return new THREE.BufferGeometry();
+
             const finalPos = new Float32Array(count * 3);
-            const finalUV = new Float32Array(count * 2);
+            const finalUV = uvAttr ? new Float32Array(count * 2) : null;
+            const finalColor = colorAttr ? new Float32Array(count * 3) : null;
             
             const cdf = new Float32Array(faces);
             let acc = 0;
@@ -744,9 +840,9 @@
                 const w = sqrtR1 * r2;
                 
                 const i3 = faceIdx * 3;
-                const ia = indexAttr.getX(i3);
-                const ib = indexAttr.getX(i3+1);
-                const ic = indexAttr.getX(i3+2);
+                const ia = vertexIndex(i3);
+                const ib = vertexIndex(i3+1);
+                const ic = vertexIndex(i3+2);
                 
                 finalPos[i*3] = posAttr.getX(ia)*u + posAttr.getX(ib)*v + posAttr.getX(ic)*w;
                 finalPos[i*3+1] = posAttr.getY(ia)*u + posAttr.getY(ib)*v + posAttr.getY(ic)*w;
@@ -756,204 +852,346 @@
                     finalUV[i*2] = uvAttr.getX(ia)*u + uvAttr.getX(ib)*v + uvAttr.getX(ic)*w;
                     finalUV[i*2+1] = uvAttr.getY(ia)*u + uvAttr.getY(ib)*v + uvAttr.getY(ic)*w;
                 }
+
+                if(colorAttr) {
+                    finalColor[i*3] = colorAttr.getX(ia)*u + colorAttr.getX(ib)*v + colorAttr.getX(ic)*w;
+                    finalColor[i*3+1] = colorAttr.getY(ia)*u + colorAttr.getY(ib)*v + colorAttr.getY(ic)*w;
+                    finalColor[i*3+2] = colorAttr.getZ(ia)*u + colorAttr.getZ(ib)*v + colorAttr.getZ(ic)*w;
+                }
             }
             
             const bufferGeo = new THREE.BufferGeometry();
             bufferGeo.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
             if(uvAttr) bufferGeo.setAttribute('uv', new THREE.BufferAttribute(finalUV, 2));
+            if(colorAttr) bufferGeo.setAttribute('color', new THREE.BufferAttribute(finalColor, 3));
             
             return bufferGeo;
         }
 
-        function loadModel(url) {
-            const loader = new THREE.GLTFLoader();
+        function getImportExtension(url, fileName = '') {
+            const source = fileName || (url && !url.startsWith('blob:') ? url.split('?')[0] : '');
+            const match = source.toLowerCase().match(/\.([a-z0-9]+)$/);
+            return match ? match[1] : 'glb';
+        }
+
+        function getImportMode() {
+            return document.getElementById('import-mode')?.value || 'auto';
+        }
+
+        function createImportLoader(extension) {
+            if (extension === 'glb' || extension === 'gltf') return new THREE.GLTFLoader();
+            if (extension === 'obj') return new THREE.OBJLoader();
+            if (extension === 'stl') return new THREE.STLLoader();
+            if (extension === 'ply') return new THREE.PLYLoader();
+            return null;
+        }
+
+        function createMeshRootFromGeometry(geometry, color = 0xb8c7d9) {
+            if (!geometry.attributes.normal) geometry.computeVertexNormals();
+            const material = new THREE.MeshStandardMaterial({
+                color,
+                roughness: 0.65,
+                metalness: 0.0,
+                vertexColors: !!geometry.attributes.color
+            });
+            const root = new THREE.Group();
+            root.add(new THREE.Mesh(geometry, material));
+            return root;
+        }
+
+        function createPointRootFromGeometry(geometry, color = 0xffffff) {
+            if (!geometry.attributes.position) return null;
+            const material = createPointMaterial(null, color, !!geometry.attributes.color, false);
+            pointMaterials.push(material);
+
+            const points = new THREE.Points(geometry, material);
+            points.userData.maxCount = geometry.attributes.position.count;
+            points.frustumCulled = false;
+
+            const root = new THREE.Group();
+            root.add(points);
+            return root;
+        }
+
+        function normalizeImportedAsset(asset, extension, importMode) {
+            if (extension === 'glb' || extension === 'gltf') {
+                return { root: asset.scene, isPointCloud: false };
+            }
+
+            if (extension === 'obj') {
+                return { root: asset, isPointCloud: false };
+            }
+
+            if (extension === 'stl') {
+                if (importMode === 'points') {
+                    return { root: createPointRootFromGeometry(asset), isPointCloud: true };
+                }
+                return { root: createMeshRootFromGeometry(asset), isPointCloud: false };
+            }
+
+            if (extension === 'ply') {
+                if (importMode === 'mesh') {
+                    return { root: createMeshRootFromGeometry(asset), isPointCloud: false };
+                }
+                return { root: createPointRootFromGeometry(asset), isPointCloud: true };
+            }
+
+            return { root: null, isPointCloud: false };
+        }
+
+        function disposeLoadedAsset(asset, extension) {
+            if (!asset) return;
+            if (asset.scene) disposeObject(asset.scene);
+            else if (asset.isObject3D) disposeObject(asset);
+            else if (asset.isBufferGeometry) asset.dispose();
+        }
+
+        function setLoadingError(statusText, spinner, message) {
+            statusText.textContent = message;
+            statusText.classList.remove('text-amber-400');
+            statusText.classList.add('text-red-500');
+            spinner.classList.add('hidden');
+        }
+
+        function applyToMaterials(material, callback) {
+            const materials = Array.isArray(material) ? material : [material];
+            materials.forEach((m) => { if (m) callback(m); });
+        }
+
+        function finishModelLoad(status, statusText, spinner) {
+            updateBounds();
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            status.classList.add('hidden');
+
+            const meshCheck = document.getElementById('show-mesh');
+            visualGroup.visible = meshCheck.checked;
+            if(viewMode === '2d' || renderStyle === 'points') {
+                meshCheck.checked = false;
+                visualGroup.visible = false;
+            }
+
+            toggleOutlineMode(document.getElementById('outline-mode').checked);
+            setRenderStyle(renderStyle);
+            resetOrientationUI();
+            updateFrameHelper();
+            updatePointDensity();
+        }
+
+        function installPointCloudRoot(root, rawBox, scale) {
+            const center = rawBox.getCenter(new THREE.Vector3());
+            const pointWrapper = new THREE.Group();
+            root.position.copy(center).negate();
+            pointWrapper.add(root);
+            pointWrapper.scale.set(scale, scale, scale);
+            pointGroup.add(pointWrapper);
+
+            activeWrappers.visual = pointWrapper;
+            activeWrappers.back = null;
+            activeWrappers.front = null;
+            activeWrappers.points = pointWrapper;
+        }
+
+        function installMeshRoot(root, rawBox, scale) {
+            const center = rawBox.getCenter(new THREE.Vector3());
+
+            const visWrapper = new THREE.Group();
+            root.position.copy(center).negate();
+            visWrapper.add(root);
+            visWrapper.scale.set(scale, scale, scale);
+
+            const backWrapper = new THREE.Group();
+            const backRoot = root.clone();
+            backWrapper.add(backRoot);
+            backWrapper.scale.set(scale, scale, scale);
+
+            const frontWrapper = new THREE.Group();
+            const frontRoot = root.clone();
+            frontWrapper.add(frontRoot);
+            frontWrapper.scale.set(scale, scale, scale);
+
+            const pointWrapper = new THREE.Group();
+            pointWrapper.position.copy(visWrapper.position);
+            pointWrapper.rotation.copy(visWrapper.rotation);
+            pointWrapper.scale.set(scale, scale, scale);
+
+            const setupStencil = (mesh, mat) => {
+                mesh.material = mat;
+                mesh.material.clippingPlanes = [clippingPlane];
+                mesh.castShadow = false;
+                mesh.receiveShadow = false;
+                mesh.frustumCulled = false;
+            };
+            backRoot.traverse((o) => { if (o.isMesh) setupStencil(o, backMat); });
+            frontRoot.traverse((o) => { if (o.isMesh) setupStencil(o, frontMat); });
+            root.traverse((o) => {
+                if (o.isMesh) {
+                    applyToMaterials(o.material, (material) => {
+                        material.clippingPlanes = [clippingPlane];
+                        material.side = THREE.DoubleSide;
+                    });
+                }
+            });
+
+            const getMeshArea = (mesh) => {
+                if(!mesh.geometry.attributes.position) return 0;
+                const idx = mesh.geometry.index;
+                const pos = mesh.geometry.attributes.position;
+                let a = 0;
+                const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+                const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+                const total = Math.floor((idx ? idx.count : pos.count) / 3) * 3;
+                const vertexIndex = (offset) => idx ? idx.getX(offset) : offset;
+                for(let i=0; i<total; i+=3) {
+                    va.fromBufferAttribute(pos, vertexIndex(i));
+                    vb.fromBufferAttribute(pos, vertexIndex(i+1));
+                    vc.fromBufferAttribute(pos, vertexIndex(i+2));
+                    ab.subVectors(vb, va);
+                    ac.subVectors(vc, va);
+                    a += ab.cross(ac).length() * 0.5;
+                }
+                return a;
+            };
+
+            const pointRoot = root.clone();
+            let cloneTotalArea = 0;
+            const cloneList = [];
+
+            pointRoot.traverse(o => {
+                if(o.isMesh && o.geometry) {
+                    const area = getMeshArea(o);
+                    if (area > 0) {
+                        cloneTotalArea += area;
+                        cloneList.push({obj: o, area: area});
+                    }
+                }
+            });
+
+            if (cloneTotalArea > 0) {
+                cloneList.forEach(item => {
+                    const ratio = item.area / cloneTotalArea;
+                    const count = Math.floor(MAX_POINTS * ratio);
+                    if(count > 0) {
+                        const sourceMaterial = Array.isArray(item.obj.material) ? item.obj.material[0] : item.obj.material;
+                        const sampledGeo = createSamplingGeometry(item.obj, count);
+                        const mat = createPointMaterial(sourceMaterial?.map, sourceMaterial?.color || 0xffffff, !!sampledGeo.attributes.color, !!sampledGeo.attributes.uv);
+                        pointMaterials.push(mat);
+
+                        const p = new THREE.Points(sampledGeo, mat);
+                        p.userData.maxCount = count;
+
+                        item.obj.geometry = sampledGeo;
+                        item.obj.material = mat;
+                        const parent = item.obj.parent;
+                        if(parent) {
+                            p.position.copy(item.obj.position);
+                            p.rotation.copy(item.obj.rotation);
+                            p.scale.copy(item.obj.scale);
+                            p.matrixAutoUpdate = true;
+                            parent.add(p);
+                            parent.remove(item.obj);
+                        }
+                    }
+                });
+            }
+
+            pointRoot.traverse(o => { if(o.isMesh) o.visible = false; });
+
+            pointWrapper.add(pointRoot);
+
+            visualGroup.add(visWrapper);
+            stencilGroup.add(backWrapper);
+            stencilGroup.add(frontWrapper);
+            pointGroup.add(pointWrapper);
+
+            activeWrappers.visual = visWrapper;
+            activeWrappers.back = backWrapper;
+            activeWrappers.front = frontWrapper;
+            activeWrappers.points = pointWrapper;
+        }
+
+        function installImportedRoot(root, isPointCloud, status, statusText, spinner) {
+            if (!root) {
+                setLoadingError(statusText, spinner, "Unsupported import.");
+                return;
+            }
+
+            root.updateMatrixWorld(true);
+            const rawBox = new THREE.Box3().setFromObject(root);
+
+            if (rawBox.isEmpty()) {
+                disposeObject(root);
+                setLoadingError(statusText, spinner, "Warning: Empty model.");
+                return;
+            }
+
+            const size = rawBox.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
+            const scale = 2 / maxDim;
+
+            if (isPointCloud) installPointCloudRoot(root, rawBox, scale);
+            else installMeshRoot(root, rawBox, scale);
+
+            finishModelLoad(status, statusText, spinner);
+        }
+
+        function loadModel(url, fileName = '') {
+            const loadId = ++modelLoadId;
+            const extension = getImportExtension(url, fileName);
+            const loader = createImportLoader(extension);
             const status = document.getElementById('loading-status');
             const statusText = document.getElementById('status-text');
             const spinner = document.getElementById('loading-spinner');
-            
+
             status.classList.remove('hidden');
             statusText.classList.remove('text-red-500');
             statusText.classList.add('text-amber-400');
             spinner.classList.remove('hidden');
             statusText.textContent = "Loading...";
 
-            loader.load(url, (gltf) => {
-                while(visualGroup.children.length > 0) visualGroup.remove(visualGroup.children[0]);
-                while(stencilGroup.children.length > 0) stencilGroup.remove(stencilGroup.children[0]);
-                while(pointGroup.children.length > 0) pointGroup.remove(pointGroup.children[0]);
-                
+            if (!loader) {
+                setLoadingError(statusText, spinner, "Unsupported file type.");
+                return;
+            }
+
+            loader.load(url, (asset) => {
+                if (loadId !== modelLoadId) {
+                    disposeLoadedAsset(asset, extension);
+                    return;
+                }
+
+                clearGroup(visualGroup);
+                clearGroup(stencilGroup);
+                clearGroup(pointGroup);
+
                 pointMaterials = [];
                 activeWrappers = { visual: null, back: null, front: null, points: null };
 
-                const root = gltf.scene;
-                root.updateMatrixWorld(true);
-                const rawBox = new THREE.Box3().setFromObject(root);
-                
-                if (rawBox.isEmpty()) {
-                    statusText.textContent = "Warning: Empty model.";
-                    return; 
-                }
-
-                const center = rawBox.getCenter(new THREE.Vector3());
-                const size = rawBox.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
-                const scale = 2 / maxDim;
-
-                // Wrappers
-                const visWrapper = new THREE.Group();
-                root.position.copy(center).negate(); 
-                visWrapper.add(root);
-                visWrapper.scale.set(scale, scale, scale); 
-                
-                const backWrapper = new THREE.Group();
-                const backRoot = root.clone();
-                backWrapper.add(backRoot);
-                backWrapper.scale.set(scale, scale, scale);
-
-                const frontWrapper = new THREE.Group();
-                const frontRoot = root.clone();
-                frontWrapper.add(frontRoot);
-                frontWrapper.scale.set(scale, scale, scale);
-                
-                const pointWrapper = new THREE.Group();
-                pointWrapper.position.copy(visWrapper.position);
-                pointWrapper.rotation.copy(visWrapper.rotation);
-                pointWrapper.scale.set(scale, scale, scale);
-
-                // Setup Stencil
-                const setupStencil = (mesh, mat) => {
-                    mesh.material = mat;
-                    mesh.material.clippingPlanes = [clippingPlane];
-                    mesh.castShadow = false;
-                    mesh.receiveShadow = false;
-                    mesh.frustumCulled = false; 
-                };
-                backRoot.traverse((o) => { if (o.isMesh) setupStencil(o, backMat); });
-                frontRoot.traverse((o) => { if (o.isMesh) setupStencil(o, frontMat); });
-                root.traverse((o) => { if (o.isMesh) { o.material.clippingPlanes = [clippingPlane]; o.material.side = THREE.DoubleSide; } });
-                
-                // --- HIGH DENSITY POINT GENERATION ---
-                let totalSurfaceArea = 0;
-                const meshList = [];
-                
-                const getMeshArea = (mesh) => {
-                    if(!mesh.geometry.index) return 0; 
-                    const idx = mesh.geometry.index;
-                    const pos = mesh.geometry.attributes.position;
-                    let a = 0;
-                    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
-                    const ab = new THREE.Vector3(), ac = new THREE.Vector3();
-                    for(let i=0; i<idx.count; i+=3) {
-                        va.fromBufferAttribute(pos, idx.getX(i));
-                        vb.fromBufferAttribute(pos, idx.getX(i+1));
-                        vc.fromBufferAttribute(pos, idx.getX(i+2));
-                        ab.subVectors(vb, va);
-                        ac.subVectors(vc, va);
-                        a += ab.cross(ac).length() * 0.5;
-                    }
-                    return a;
-                };
-
-                root.traverse(o => {
-                    if(o.isMesh && o.geometry) {
-                        const area = getMeshArea(o);
-                        if(area > 0) {
-                            meshList.push({ mesh: o, area: area });
-                            totalSurfaceArea += area;
-                        }
-                    }
-                });
-
-                // Re-implementation of Hierarchy Clone for Points
-                const pointRoot = root.clone();
-                const pointsToReplace = [];
-                let cloneTotalArea = 0;
-                const cloneList = [];
-                
-                pointRoot.traverse(o => {
-                   if(o.isMesh && o.geometry && o.geometry.index) {
-                       const area = getMeshArea(o);
-                       cloneTotalArea += area;
-                       cloneList.push({obj: o, area: area});
-                   } 
-                });
-                
-                cloneList.forEach(item => {
-                    const ratio = item.area / cloneTotalArea;
-                    const count = Math.floor(MAX_POINTS * ratio);
-                    if(count > 0) {
-                         const sampledGeo = createSamplingGeometry(item.obj, count);
-                         const mat = createPointMaterial(item.obj.material.map, item.obj.material.color);
-                         pointMaterials.push(mat);
-                         
-                         const p = new THREE.Points(sampledGeo, mat);
-                         p.userData.maxCount = count;
-                         
-                         item.obj.geometry = sampledGeo;
-                         item.obj.material = mat;
-                         const parent = item.obj.parent;
-                         if(parent) {
-                             p.position.copy(item.obj.position);
-                             p.rotation.copy(item.obj.rotation);
-                             p.scale.copy(item.obj.scale);
-                             p.matrixAutoUpdate = true;
-                             parent.add(p);
-                             parent.remove(item.obj);
-                         }
-                    }
-                });
-                
-                pointRoot.traverse(o => { if(o.isMesh) o.visible = false; });
-                
-                pointWrapper.add(pointRoot);
-
-                visualGroup.add(visWrapper);
-                stencilGroup.add(backWrapper);
-                stencilGroup.add(frontWrapper);
-                pointGroup.add(pointWrapper);
-                
-                activeWrappers.visual = visWrapper;
-                activeWrappers.back = backWrapper;
-                activeWrappers.front = frontWrapper;
-                activeWrappers.points = pointWrapper;
-
-                updateBounds();
-                controls.target.set(0, 0, 0);
-                controls.update();
-
-                status.classList.add('hidden');
-                
-                const meshCheck = document.getElementById('show-mesh');
-                visualGroup.visible = meshCheck.checked;
-                if(viewMode === '2d') {
-                    meshCheck.checked = false;
-                    visualGroup.visible = false;
-                }
-                
-                toggleOutlineMode(document.getElementById('outline-mode').checked);
-                setRenderStyle(renderStyle);
-                resetOrientationUI();
-                updateFrameHelper(); 
-                updatePointDensity();
+                const imported = normalizeImportedAsset(asset, extension, getImportMode());
+                installImportedRoot(imported.root, imported.isPointCloud, status, statusText, spinner);
 
             }, undefined, (e) => {
+                if (loadId !== modelLoadId) return;
                 console.error(e);
-                statusText.textContent = "Error loading model.";
-                statusText.classList.remove('text-amber-400');
-                statusText.classList.add('text-red-500');
-                spinner.classList.add('hidden'); 
+                setLoadingError(statusText, spinner, "Error loading model.");
             });
         }
         
-        function updatePointDensity() {
-            const pct = parseFloat(document.getElementById('point-count').value);
-            document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
+        function setPointDrawFraction(fraction) {
+            pointDrawFraction = clamp(finiteNumber(fraction, DEFAULT_POINT_DENSITY), 0.01, 1.0);
             pointGroup.traverse(o => {
                 if(o.isPoints && o.userData.maxCount) {
-                    const count = Math.floor(o.userData.maxCount * pct);
+                    const count = Math.floor(o.userData.maxCount * pointDrawFraction);
                     o.geometry.setDrawRange(0, count);
                 }
             });
+            return pointDrawFraction;
+        }
+
+        function updatePointDensity() {
+            const pct = setPointDrawFraction(document.getElementById('point-count').value);
+            document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
         }
         
         function updateBounds() {
@@ -972,19 +1210,19 @@
 
         function updateOrientation() {
             if (!activeWrappers.visual) return;
-            const rx = parseFloat(document.getElementById('rot-x').value) * (Math.PI / 180);
-            const ry = parseFloat(document.getElementById('rot-y').value) * (Math.PI / 180);
-            const rz = parseFloat(document.getElementById('rot-z').value) * (Math.PI / 180);
+            const rx = clamp(finiteNumber(document.getElementById('rot-x').value, 0), 0, 360) * (Math.PI / 180);
+            const ry = clamp(finiteNumber(document.getElementById('rot-y').value, 0), 0, 360) * (Math.PI / 180);
+            const rz = clamp(finiteNumber(document.getElementById('rot-z').value, 0), 0, 360) * (Math.PI / 180);
             const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
             
             activeWrappers.visual.rotation.copy(euler);
-            activeWrappers.back.rotation.copy(euler);
-            activeWrappers.front.rotation.copy(euler);
+            if(activeWrappers.back) activeWrappers.back.rotation.copy(euler);
+            if(activeWrappers.front) activeWrappers.front.rotation.copy(euler);
             if(activeWrappers.points) activeWrappers.points.rotation.copy(euler);
             
             updateBounds();
             if (!isAnimate) {
-                const currentY = parseFloat(document.getElementById('slice-slider').value);
+                const currentY = finiteNumber(document.getElementById('slice-slider').value, 0);
                 updatePlaneHeight(currentY);
             }
         }
@@ -1013,6 +1251,9 @@
         }
         
         window.setRenderStyle = function(style) {
+            if (style === 'mesh' && activeWrappers.visual && (!activeWrappers.back || !activeWrappers.front)) {
+                style = 'points';
+            }
             renderStyle = style;
             const btnMesh = document.getElementById('style-mesh');
             const btnPoints = document.getElementById('style-points');
@@ -1043,103 +1284,39 @@
                 updatePlaneHeight(document.getElementById('slice-slider').value);
             }
         }
-        
-        window.toggle3DProjection = function(isOrtho) {
-            isOrtho3D = isOrtho;
-            if (viewMode !== '3d') return; 
-
-            const target = controls.target.clone();
-            
-            if (isOrtho) {
-                // Switch to Ortho
-                activeCamera = orthoCamera3D;
-                // Sync View
-                const dist = perspectiveCamera.position.distanceTo(target);
-                const vFOV = perspectiveCamera.fov * Math.PI / 180;
-                const height = 2 * dist * Math.tan(vFOV / 2);
-                const width = height * perspectiveCamera.aspect;
-                
-                orthoCamera3D.left = -width / 2;
-                orthoCamera3D.right = width / 2;
-                orthoCamera3D.top = height / 2;
-                orthoCamera3D.bottom = -height / 2;
-                orthoCamera3D.zoom = 1; 
-                orthoCamera3D.updateProjectionMatrix();
-                
-                orthoCamera3D.position.copy(perspectiveCamera.position);
-                orthoCamera3D.quaternion.copy(perspectiveCamera.quaternion);
-            } else {
-                // Switch to Perspective
-                activeCamera = perspectiveCamera;
-                perspectiveCamera.position.copy(orthoCamera3D.position);
-                perspectiveCamera.quaternion.copy(orthoCamera3D.quaternion);
-            }
-            
-            controls.object = activeCamera;
-            controls.update();
-        }
-
         function updateFrameHelper() {
             if (!frameHelper) return;
-            const w = parseInt(document.getElementById('export-w').value) || 1080;
-            const h = parseInt(document.getElementById('export-h').value) || 1080;
+            const w = Math.max(2, finiteInteger(document.getElementById('export-w').value, 1080));
+            const h = Math.max(2, finiteInteger(document.getElementById('export-h').value, 1080));
             const aspect = w / h;
             const visHeight = FRUSTUM_SIZE * captureScale;
             const visWidth = visHeight * aspect;
             frameHelper.scale.set(visWidth, visHeight, 1);
-            frameHelper.position.y = parseFloat(document.getElementById('slice-slider').value) || 0;
+            frameHelper.position.y = finiteNumber(document.getElementById('slice-slider').value, 0);
             frameHelper.visible = document.getElementById('show-frame').checked;
         }
 
-        // --- OFFLINE RENDERING LOGIC ---
-        async function startExport() {
-            if (isProcessingVideo) return;
-            if (typeof VideoEncoder === 'undefined') {
-                alert("Your browser does not support WebCodecs.");
-                return;
-            }
+        function updateExportButtonLabel() {
+            const format = document.getElementById('export-format').value;
+            const label = format === 'png-sequence' ? 'Export PNG Frames (.zip)' : 'Offline Render (MP4)';
+            document.getElementById('export-button-label').textContent = label;
+        }
 
-            isProcessingVideo = true;
-            const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
+        function getExportSettings() {
+            return {
+                format: document.getElementById('export-format').value,
+                width: evenPositiveInteger(document.getElementById('export-w').value, 1080),
+                height: evenPositiveInteger(document.getElementById('export-h').value, 1080),
+                duration: clamp(finiteInteger(document.getElementById('export-duration').value, 5), 1, 60),
+                fps: clamp(finiteInteger(document.getElementById('export-fps').value, 60), 1, 120)
+            };
+        }
 
-            // Save State
-            preExportState.width = window.innerWidth;
-            preExportState.height = window.innerHeight;
-            preExportState.pixelRatio = renderer.getPixelRatio();
-            
+        function prepareExportRenderState(width, height) {
             renderer.setPixelRatio(1);
-
-            const w = parseInt(document.getElementById('export-w').value) || 1080;
-            const h = parseInt(document.getElementById('export-h').value) || 1080;
-            const width = w % 2 === 0 ? w : w - 1;
-            const height = h % 2 === 0 ? h : h - 1;
-            
-            const maxTex = renderer.capabilities.maxTextureSize;
-            if(width > maxTex || height > maxTex) {
-                alert(`Resolution too high!`);
-                restoreState(document.getElementById('show-frame').checked, visualGroup.visible);
-                isProcessingVideo = false;
-                return;
-            }
-
-            const dur = parseInt(document.getElementById('export-duration').value) || 5;
-            const fps = parseInt(document.getElementById('export-fps').value) || 60;
-            const bitrate = 10_000_000; 
-
-            isAnimate = false;
-            document.getElementById('anim-toggle').checked = false;
-            
-            const wasFrameVisible = frameHelper.visible;
-            frameHelper.visible = false; 
-            const wasMeshVisible = visualGroup.visible;
-
-            document.getElementById('rec-overlay').classList.remove('hidden');
-            const percentEl = document.getElementById('rec-percentage');
-            const barEl = document.getElementById('rec-progress-bar');
-
-            if(renderTarget) renderTarget.dispose();
-
             renderer.setSize(width, height);
+            disposeRenderTarget();
+
             renderTarget = new THREE.WebGLRenderTarget(width, height, {
                 minFilter: THREE.LinearFilter,
                 magFilter: THREE.LinearFilter,
@@ -1156,110 +1333,234 @@
             orthoCamera.right = fW / 2;
             orthoCamera.top = fH / 2;
             orthoCamera.bottom = -fH / 2;
-            orthoCamera.zoom = 1; 
+            orthoCamera.zoom = 1;
             orthoCamera.updateProjectionMatrix();
-            orthoCamera.position.set(0, 10, 0); 
+            orthoCamera.position.set(0, 10, 0);
             orthoCamera.lookAt(0, 0, 0);
-            
-            // Handle Visibility for Export based on Style
+
+            frameHelper.visible = false;
             if (renderStyle === 'mesh') {
-                visualGroup.visible = false; // Hide 3D model, only slice
+                visualGroup.visible = false;
             } else {
-                // Point mode - ensure points are visible
                 pointGroup.visible = true;
+                visualGroup.visible = false;
+                stencilGroup.visible = false;
+                capGroup.visible = false;
+                setPointDrawFraction(EXPORT_POINT_DENSITY);
+            }
+        }
+
+        function renderPointExportFrame() {
+            renderer.setRenderTarget(null);
+            renderer.autoClear = true;
+            renderer.clear(true, true, true);
+            renderer.render(scene, activeCamera);
+            renderer.getContext().flush();
+        }
+
+        function renderExportFrame(progress) {
+            pointMaterials.forEach(m => {
+                m.uniforms.uIsOrtho.value = 1.0;
+                m.uniforms.uOrthoZoom.value = 1.0;
+            });
+
+            const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
+            updatePlaneHeight(yPos);
+
+            if (renderStyle === 'mesh') {
+                performMultiPassRender();
+            } else {
+                renderPointExportFrame();
+            }
+        }
+
+        function updateExportProgress(progress, percentEl, barEl) {
+            const pct = Math.round(progress * 100) + '%';
+            percentEl.textContent = pct;
+            barEl.style.width = pct;
+        }
+
+        function canvasToPngBlob() {
+            return new Promise((resolve, reject) => {
+                renderer.domElement.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error('Could not capture PNG frame.'));
+                }, 'image/png');
+            });
+        }
+
+        // --- OFFLINE RENDERING LOGIC ---
+        async function startExport() {
+            if (isProcessingVideo) return;
+
+            const settings = getExportSettings();
+            if (settings.format === 'mp4' && typeof VideoEncoder === 'undefined') {
+                alert("Your browser does not support WebCodecs.");
+                return;
             }
 
-            const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width, height }, fastStart: 'in-memory' });
+            const maxTex = renderer.capabilities.maxTextureSize;
+            if(settings.width > maxTex || settings.height > maxTex) {
+                alert(`Resolution too high. Maximum texture size is ${maxTex}px.`);
+                return;
+            }
+
+            const wasFrameVisible = frameHelper.visible;
+            const wasMeshVisible = visualGroup.visible;
+            const previousPointDrawFraction = pointDrawFraction;
+            let didPrepareRenderState = false;
+
+            isProcessingVideo = true;
+
+            try {
+                // Save State
+                preExportState.width = window.innerWidth;
+                preExportState.height = window.innerHeight;
+                preExportState.pixelRatio = renderer.getPixelRatio();
+                didPrepareRenderState = true;
+
+                isAnimate = false;
+                document.getElementById('anim-toggle').checked = false;
+
+                document.getElementById('rec-overlay').classList.remove('hidden');
+                const percentEl = document.getElementById('rec-percentage');
+                const barEl = document.getElementById('rec-progress-bar');
+                updateExportProgress(0, percentEl, barEl);
+
+                prepareExportRenderState(settings.width, settings.height);
+
+                if (settings.format === 'png-sequence') {
+                    await exportPngSequence(settings, percentEl, barEl);
+                } else {
+                    await exportMp4(settings, percentEl, barEl);
+                }
+            } catch (e) {
+                console.error("Export failed:", e);
+                alert("Export failed.");
+            } finally {
+                if (didPrepareRenderState) {
+                    restoreState(wasFrameVisible, wasMeshVisible);
+                } else {
+                    document.getElementById('rec-overlay').classList.add('hidden');
+                }
+                isProcessingVideo = false;
+                setPointDrawFraction(previousPointDrawFraction);
+            }
+        }
+
+        async function exportMp4(settings, percentEl, barEl) {
+            const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
+            const muxer = new Muxer({
+                target: new ArrayBufferTarget(),
+                video: { codec: 'avc', width: settings.width, height: settings.height },
+                fastStart: 'in-memory'
+            });
             const videoEncoder = new VideoEncoder({
                 output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
                 error: e => { console.error("Encoding error:", e); isProcessingVideo = false; }
             });
 
-            const pixelCount = width * height;
-            let codec = 'avc1.4d002a'; 
-            let targetBitrate = 10_000_000; 
-
-            if (pixelCount > 2228224) {
-                codec = 'avc1.4d0033'; 
-                targetBitrate = 25_000_000; 
-            }
-
-            videoEncoder.configure({
-                codec: codec, 
-                width, height, 
-                bitrate: targetBitrate, 
-                framerate: fps
-            });
-
-            const totalFrames = fps * dur;
-            const frameDurationUs = 1e6 / fps; 
-
-            for (let i = 0; i <= totalFrames; i++) {
-                if (!isProcessingVideo || videoEncoder.state === 'closed') break; 
-
-                // Update Camera Uniforms for Export (important if we switch to ortho mid-stream)
-                const isOrtho = 1.0; 
-                const orthoZoom = 1.0; // Export uses its own sizing logic via frustum, not zoom prop
-                // Note: Shader uses 'uOrthoZoom' to scale points. 
-                // Since we reset camera zoom to 1 and change frustum, points might look small?
-                // Actually, if we change frustum size, the screen space size of 1 unit changes.
-                // We should pass a compensation factor if we want constant pixel size.
-                // But for now, let's keep it simple. uOrthoZoom = 1 is safe.
-                
-                pointMaterials.forEach(m => {
-                    m.uniforms.uIsOrtho.value = isOrtho;
-                    m.uniforms.uOrthoZoom.value = orthoZoom;
-                });
-
-                const progress = i / totalFrames;
-                const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
-                updatePlaneHeight(yPos);
-                
-                if (renderStyle === 'mesh') {
-                    performMultiPassRender();
-                } else {
-                    renderer.render(scene, activeCamera);
-                }
-                
-                const timestamp = i * frameDurationUs;
-                const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
-                videoEncoder.encode(frame, { keyFrame: i % 60 === 0 });
-                frame.close(); 
-
-                const pct = Math.round(progress * 100) + '%';
-                percentEl.textContent = pct;
-                barEl.style.width = pct;
-
-                await new Promise(r => setTimeout(r, 50));
-            }
+            const pixelCount = settings.width * settings.height;
+            const codec = pixelCount > 2228224 ? 'avc1.4d0033' : 'avc1.4d002a';
+            const targetBitrate = clamp(Math.round(pixelCount * settings.fps * 0.35), 24_000_000, 140_000_000);
+            const encoderConfig = {
+                codec,
+                width: settings.width,
+                height: settings.height,
+                bitrate: targetBitrate,
+                framerate: settings.fps,
+                latencyMode: 'quality'
+            };
 
             try {
-                if (videoEncoder.state !== 'closed') {
-                    await videoEncoder.flush();
-                }
-                muxer.finalize();
-                
-                const { buffer } = muxer.target; 
-                const blob = new Blob([buffer], { type: 'video/mp4' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `slice_render_${width}x${height}_${fps}fps.mp4`;
-                a.click();
+                videoEncoder.configure(encoderConfig);
             } catch (e) {
-                console.error("Export failed:", e);
-                alert("Export failed.");
+                delete encoderConfig.latencyMode;
+                videoEncoder.configure(encoderConfig);
             }
 
-            restoreState(wasFrameVisible, wasMeshVisible);
-            isProcessingVideo = false;
+            const totalFrames = Math.max(1, settings.fps * settings.duration);
+            const frameDurationUs = 1e6 / settings.fps;
+
+            for (let i = 0; i < totalFrames; i++) {
+                if (!isProcessingVideo || videoEncoder.state === 'closed') break;
+
+                const progress = totalFrames === 1 ? 0 : i / (totalFrames - 1);
+                renderExportFrame(progress);
+
+                const timestamp = i * frameDurationUs;
+                const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
+                videoEncoder.encode(frame, { keyFrame: renderStyle === 'points' || i % settings.fps === 0 });
+                frame.close();
+
+                updateExportProgress(progress, percentEl, barEl);
+
+                if (i % 5 === 0) await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+
+            if (videoEncoder.state !== 'closed') {
+                await videoEncoder.flush();
+            }
+            muxer.finalize();
+
+            const { buffer } = muxer.target;
+            const blob = new Blob([buffer], { type: 'video/mp4' });
+            downloadBlob(blob, `slice_render_${settings.width}x${settings.height}_${settings.fps}fps.mp4`);
+        }
+
+        async function exportPngSequence(settings, percentEl, barEl) {
+            const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
+            const zip = new JSZip();
+            const folder = zip.folder('frames');
+            const totalFrames = Math.max(1, settings.fps * settings.duration);
+            const digits = String(totalFrames - 1).length;
+
+            for (let i = 0; i < totalFrames; i++) {
+                if (!isProcessingVideo) break;
+
+                const progress = totalFrames === 1 ? 0 : i / (totalFrames - 1);
+                renderExportFrame(progress);
+
+                const blob = await canvasToPngBlob();
+                const filename = `frame_${String(i).padStart(digits, '0')}.png`;
+                folder.file(filename, blob, { binary: true, compression: 'STORE' });
+
+                updateExportProgress(progress, percentEl, barEl);
+
+                if (i % 3 === 0) await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+
+            const zipBlob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'STORE',
+                streamFiles: true
+            }, (metadata) => {
+                const progress = clamp(metadata.percent / 100, 0, 1);
+                updateExportProgress(progress, percentEl, barEl);
+            });
+
+            downloadBlob(zipBlob, `slice_frames_${settings.width}x${settings.height}_${settings.fps}fps.zip`);
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            revokeBlobUrl(activeDownloadUrl);
+            activeDownloadUrl = url;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            setTimeout(() => {
+                revokeBlobUrl(url);
+                if (activeDownloadUrl === url) activeDownloadUrl = null;
+            }, 10000);
         }
 
         function restoreState(restoreFrame, restoreMesh) {
             renderer.setPixelRatio(preExportState.pixelRatio);
             renderer.setSize(preExportState.width, preExportState.height);
             
-            if(renderTarget) renderTarget.dispose();
+            disposeRenderTarget();
 
             const w = preExportState.width;
             const h = preExportState.height;
@@ -1273,15 +1574,20 @@
 
             onWindowResize(); 
             document.getElementById('rec-overlay').classList.add('hidden');
-            if(frameHelper) frameHelper.visible = restoreFrame;
-            if (typeof restoreMesh !== 'undefined') visualGroup.visible = restoreMesh;
-            document.getElementById('show-mesh').checked = visualGroup.visible;
             
             if (viewMode === '3d') setMode('3d'); else setMode('2d');
+            if(frameHelper) frameHelper.visible = restoreFrame;
+            if (typeof restoreMesh !== 'undefined' && renderStyle === 'mesh') {
+                visualGroup.visible = restoreMesh;
+                document.getElementById('show-mesh').checked = restoreMesh;
+            } else {
+                document.getElementById('show-mesh').checked = visualGroup.visible;
+            }
         }
 
         function updatePlaneHeight(val) {
-            const v = parseFloat(val);
+            const fallback = finiteNumber(document.getElementById('slice-slider').value, 0);
+            const v = clamp(finiteNumber(val, fallback), modelBounds.min, modelBounds.max);
             // Mesh Slice
             clippingPlane.constant = v;
             capMesh.position.y = v;
@@ -1311,33 +1617,37 @@
                 updatePlaneHeight(e.target.value);
             });
             document.getElementById('anim-toggle').addEventListener('change', (e) => isAnimate = e.target.checked);
-            document.getElementById('speed-slider').addEventListener('input', (e) => scanSpeed = parseFloat(e.target.value));
+            document.getElementById('speed-slider').addEventListener('input', (e) => scanSpeed = clamp(finiteNumber(e.target.value, scanSpeed), 0.1, 2.0));
             document.getElementById('btn-3d').addEventListener('click', () => setMode('3d'));
             document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
             document.getElementById('btn-export').addEventListener('click', startExport);
-            document.getElementById('btn-reset').addEventListener('click', () => loadModel(DEFAULT_MODEL));
+            document.getElementById('export-format').addEventListener('change', updateExportButtonLabel);
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                revokeActiveUploadUrl();
+                loadModel(DEFAULT_MODEL);
+            });
             
             ['x', 'y', 'z'].forEach(axis => {
                 const slider = document.getElementById(`rot-${axis}`);
                 const number = document.getElementById(`num-rot-${axis}`);
                 slider.addEventListener('input', () => { number.value = slider.value; updateOrientation(); });
                 number.addEventListener('input', () => {
-                    let val = parseFloat(number.value);
-                    if (val < 0) val = 0; if (val > 360) val = 360;
+                    const val = clamp(finiteNumber(number.value, 0), 0, 360);
+                    number.value = val;
                     slider.value = val; updateOrientation();
                 });
             });
             
             document.getElementById('outline-mode').addEventListener('change', (e) => toggleOutlineMode(e.target.checked));
             document.getElementById('outline-width').addEventListener('input', (e) => {
-                outlineWidth = parseFloat(e.target.value);
+                outlineWidth = clamp(finiteNumber(e.target.value, outlineWidth), 1, 10);
                 postMaterial.uniforms.uOutlineWidth.value = outlineWidth;
                 document.getElementById('outline-val').textContent = outlineWidth.toFixed(0) + ' px';
             });
             
             // Point UI
             document.getElementById('point-size').addEventListener('input', (e) => {
-                pointSize = parseFloat(e.target.value);
+                pointSize = clamp(finiteNumber(e.target.value, pointSize), POINT_SIZE_MIN, POINT_SIZE_MAX);
                 document.getElementById('point-size-val').textContent = pointSize.toFixed(2);
                 pointMaterials.forEach(m => m.uniforms.size.value = pointSize);
             });
@@ -1345,13 +1655,13 @@
                 updatePointDensity();
             });
             document.getElementById('point-thick').addEventListener('input', (e) => {
-                sliceThickness = parseFloat(e.target.value);
+                sliceThickness = clamp(finiteNumber(e.target.value, sliceThickness), SLICE_THICKNESS_MIN, SLICE_THICKNESS_MAX);
                 document.getElementById('point-thick-val').textContent = sliceThickness.toFixed(3);
                 updatePlaneHeight(document.getElementById('slice-slider').value);
             });
 
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
-                captureScale = parseFloat(e.target.value);
+                captureScale = clamp(finiteNumber(e.target.value, captureScale), 0.2, 2.0);
                 document.getElementById('zoom-val').textContent = captureScale.toFixed(1) + 'x';
                 document.getElementById('show-frame').checked = true;
                 updateFrameHelper();
@@ -1360,8 +1670,15 @@
             document.getElementById('export-w').addEventListener('input', updateFrameHelper);
             document.getElementById('export-h').addEventListener('input', updateFrameHelper);
             document.getElementById('file-input').addEventListener('change', (e) => {
-                if(e.target.files[0]) loadModel(URL.createObjectURL(e.target.files[0]));
+                if(e.target.files[0]) {
+                    const file = e.target.files[0];
+                    revokeActiveUploadUrl();
+                    activeUploadUrl = URL.createObjectURL(file);
+                    loadModel(activeUploadUrl, file.name);
+                    e.target.value = '';
+                }
             });
+            updateExportButtonLabel();
         }
 
         function setMode(mode) {
@@ -1486,10 +1803,19 @@
             orthoCamera.top = fH / 2;
             orthoCamera.bottom = -fH / 2;
             orthoCamera.updateProjectionMatrix();
+            if (orthoCamera3D) {
+                const h3d = orthoCamera3D.top - orthoCamera3D.bottom;
+                const w3d = h3d * aspect;
+                orthoCamera3D.left = -w3d / 2;
+                orthoCamera3D.right = w3d / 2;
+                orthoCamera3D.updateProjectionMatrix();
+            }
             
             renderer.setSize(w, h);
-            renderTarget.setSize(w * window.devicePixelRatio, h * window.devicePixelRatio);
-            postMaterial.uniforms.uResolution.value.set(w * window.devicePixelRatio, h * window.devicePixelRatio);
+            if (renderTarget) {
+                renderTarget.setSize(w * window.devicePixelRatio, h * window.devicePixelRatio);
+                postMaterial.uniforms.uResolution.value.set(w * window.devicePixelRatio, h * window.devicePixelRatio);
+            }
             
             updateFrameHelper();
         }
