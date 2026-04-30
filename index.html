@@ -50,7 +50,7 @@
             <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V5.8</h1>
+                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V6.1</h1>
                 </div>
                 <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -92,7 +92,7 @@
                     <div class="flex items-center justify-between">
                         <label class="text-xs font-bold uppercase text-gray-400">Auto Scan</label>
                         <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="anim-toggle" class="sr-only peer" checked>
+                            <input type="checkbox" id="anim-toggle" class="sr-only peer">
                             <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                     </div>
@@ -231,25 +231,31 @@
                          <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Point Size</label>
-                                <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.16</span>
+                                <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.10</span>
                             </div>
-                            <input type="range" id="point-size" min="0.02" max="1.0" step="0.005" value="0.16" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-size" min="0.02" max="1.0" step="0.005" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                          <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Preview Density</label>
-                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">100%</span>
+                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">10%</span>
                             </div>
-                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="1.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                          <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Thickness</label>
-                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.020</span>
+                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.001</span>
                             </div>
-                            <input type="range" id="point-thick" min="0.002" max="0.08" step="0.001" value="0.02" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-thick" min="0.001" max="0.08" step="0.001" value="0.001" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
-                     </div>
+                         <div class="pt-1 border-t border-gray-800">
+                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                <span>Show Full Point Cloud</span>
+                                <input type="checkbox" id="show-full-cloud" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                            </label>
+                         </div>
+                      </div>
                 </div>
 
                 <hr class="border-gray-800">
@@ -266,8 +272,8 @@
                     </div>
                     <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group mb-2">
                         <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Model or Point Cloud</span>
-                        <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply" class="hidden"/>
-                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">GLB, GLTF, OBJ, STL, PLY</span>
+                        <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply,.splat" class="hidden"/>
+                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">GLB, GLTF, OBJ, STL, PLY, SPLAT</span>
                     </label>
                     <button id="btn-reset" class="w-full py-1 text-[10px] font-bold text-gray-500 hover:text-white bg-transparent border border-gray-700 hover:bg-gray-700 rounded transition-all">
                         Reset to Default Model
@@ -303,13 +309,13 @@
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
         const FRUSTUM_SIZE = 3.0;
         const MAX_POINTS = 5000000;
-        const DEFAULT_POINT_SIZE = 0.16;
+        const DEFAULT_POINT_SIZE = 0.1;
         const POINT_SIZE_MIN = 0.02;
         const POINT_SIZE_MAX = 1.0;
-        const DEFAULT_POINT_DENSITY = 1.0;
+        const DEFAULT_POINT_DENSITY = 0.1;
         const EXPORT_POINT_DENSITY = 1.0;
-        const DEFAULT_SLICE_THICKNESS = 0.02;
-        const SLICE_THICKNESS_MIN = 0.002;
+        const DEFAULT_SLICE_THICKNESS = 0.001;
+        const SLICE_THICKNESS_MIN = 0.001;
         const SLICE_THICKNESS_MAX = 0.08;
 
         // --- VARIABLES ---
@@ -326,7 +332,7 @@
 
         let capMesh;
         let frameHelper; 
-        let isAnimate = true;
+        let isAnimate = false;
         let scanSpeed = 0.5;
         let time = 0;
         let modelBounds = { min: -1, max: 1 };
@@ -352,6 +358,7 @@
         let pointSize = DEFAULT_POINT_SIZE;
         let pointDrawFraction = DEFAULT_POINT_DENSITY;
         let sliceThickness = DEFAULT_SLICE_THICKNESS;
+        let showFullPointCloud = false;
 
         // Export State
         let isProcessingVideo = false;
@@ -369,6 +376,10 @@
         function finiteInteger(value, fallback = 0) {
             const parsed = Number.parseInt(value, 10);
             return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
+        function sigmoid(value) {
+            return 1 / (1 + Math.exp(-value));
         }
 
         function clamp(value, min, max) {
@@ -765,7 +776,7 @@
                 `,
                 clipping: true,
                 transparent: false,
-                clippingPlanes: [slabPlaneTop, slabPlaneBottom] 
+                clippingPlanes: showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom]
             });
         };
         
@@ -868,6 +879,206 @@
             return bufferGeo;
         }
 
+        function createSplatGeometry(buffer) {
+            const bytesPerSplat = 32;
+            const count = Math.floor(buffer.byteLength / bytesPerSplat);
+            if (count <= 0) return new THREE.BufferGeometry();
+
+            const view = new DataView(buffer);
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+
+            for (let i = 0; i < count; i++) {
+                const offset = i * bytesPerSplat;
+                positions[i * 3] = view.getFloat32(offset, true);
+                positions[i * 3 + 1] = view.getFloat32(offset + 4, true);
+                positions[i * 3 + 2] = view.getFloat32(offset + 8, true);
+
+                colors[i * 3] = view.getUint8(offset + 24) / 255;
+                colors[i * 3 + 1] = view.getUint8(offset + 25) / 255;
+                colors[i * 3 + 2] = view.getUint8(offset + 26) / 255;
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            return geometry;
+        }
+
+        function findPlyHeaderEnd(bytes) {
+            const marker = [101, 110, 100, 95, 104, 101, 97, 100, 101, 114];
+            for (let i = 0; i <= bytes.length - marker.length; i++) {
+                let found = true;
+                for (let j = 0; j < marker.length; j++) {
+                    if (bytes[i + j] !== marker[j]) {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found) {
+                    let end = i + marker.length;
+                    if (bytes[end] === 13) end++;
+                    if (bytes[end] === 10) end++;
+                    return end;
+                }
+            }
+            return -1;
+        }
+
+        function plyPropertyReader(type) {
+            const readers = {
+                char: { size: 1, read: (view, offset) => view.getInt8(offset) },
+                int8: { size: 1, read: (view, offset) => view.getInt8(offset) },
+                uchar: { size: 1, read: (view, offset) => view.getUint8(offset) },
+                uint8: { size: 1, read: (view, offset) => view.getUint8(offset) },
+                short: { size: 2, read: (view, offset, little) => view.getInt16(offset, little) },
+                int16: { size: 2, read: (view, offset, little) => view.getInt16(offset, little) },
+                ushort: { size: 2, read: (view, offset, little) => view.getUint16(offset, little) },
+                uint16: { size: 2, read: (view, offset, little) => view.getUint16(offset, little) },
+                int: { size: 4, read: (view, offset, little) => view.getInt32(offset, little) },
+                int32: { size: 4, read: (view, offset, little) => view.getInt32(offset, little) },
+                uint: { size: 4, read: (view, offset, little) => view.getUint32(offset, little) },
+                uint32: { size: 4, read: (view, offset, little) => view.getUint32(offset, little) },
+                float: { size: 4, read: (view, offset, little) => view.getFloat32(offset, little) },
+                float32: { size: 4, read: (view, offset, little) => view.getFloat32(offset, little) },
+                double: { size: 8, read: (view, offset, little) => view.getFloat64(offset, little) },
+                float64: { size: 8, read: (view, offset, little) => view.getFloat64(offset, little) }
+            };
+            return readers[type.toLowerCase()] || null;
+        }
+
+        function parsePlyHeader(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const headerEnd = findPlyHeaderEnd(bytes);
+            if (headerEnd < 0) return null;
+
+            const header = new TextDecoder().decode(bytes.subarray(0, headerEnd));
+            const lines = header.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            let format = 'ascii';
+            let vertexCount = 0;
+            let inVertex = false;
+            const vertexProperties = [];
+
+            lines.forEach((line) => {
+                const parts = line.split(/\s+/);
+                if (parts[0] === 'format') format = parts[1];
+                if (parts[0] === 'element') {
+                    inVertex = parts[1] === 'vertex';
+                    if (inVertex) vertexCount = finiteInteger(parts[2], 0);
+                    return;
+                }
+                if (inVertex && parts[0] === 'property' && parts[1] !== 'list') {
+                    vertexProperties.push({ type: parts[1], name: parts[2] });
+                }
+            });
+
+            return { format, headerEnd, vertexCount, vertexProperties };
+        }
+
+        function createGaussianPlyGeometry(buffer) {
+            const header = parsePlyHeader(buffer);
+            if (!header || header.vertexCount <= 0) return null;
+
+            const names = header.vertexProperties.map(prop => prop.name);
+            const hasPosition = ['x', 'y', 'z'].every(name => names.includes(name));
+            const hasFdcColor = ['f_dc_0', 'f_dc_1', 'f_dc_2'].every(name => names.includes(name));
+            const hasRgbColor = ['red', 'green', 'blue'].every(name => names.includes(name));
+            const hasGaussianProps = hasFdcColor || names.includes('opacity') || names.includes('scale_0') || names.includes('rot_0');
+            if (!hasPosition || (!hasGaussianProps && !hasRgbColor)) return null;
+
+            const positions = new Float32Array(header.vertexCount * 3);
+            const colors = new Float32Array(header.vertexCount * 3);
+            const propIndex = (name) => names.indexOf(name);
+            const xIndex = propIndex('x');
+            const yIndex = propIndex('y');
+            const zIndex = propIndex('z');
+            const f0Index = propIndex('f_dc_0');
+            const f1Index = propIndex('f_dc_1');
+            const f2Index = propIndex('f_dc_2');
+            const redIndex = propIndex('red');
+            const greenIndex = propIndex('green');
+            const blueIndex = propIndex('blue');
+            const opacityIndex = propIndex('opacity');
+            const shC0 = 0.28209479177387814;
+
+            const writeVertex = (i, values) => {
+                positions[i * 3] = values[xIndex];
+                positions[i * 3 + 1] = values[yIndex];
+                positions[i * 3 + 2] = values[zIndex];
+
+                if (hasFdcColor) {
+                    const opacity = opacityIndex >= 0 ? sigmoid(values[opacityIndex]) : 1;
+                    colors[i * 3] = clamp((0.5 + shC0 * values[f0Index]) * opacity, 0, 1);
+                    colors[i * 3 + 1] = clamp((0.5 + shC0 * values[f1Index]) * opacity, 0, 1);
+                    colors[i * 3 + 2] = clamp((0.5 + shC0 * values[f2Index]) * opacity, 0, 1);
+                } else {
+                    colors[i * 3] = clamp(values[redIndex] / 255, 0, 1);
+                    colors[i * 3 + 1] = clamp(values[greenIndex] / 255, 0, 1);
+                    colors[i * 3 + 2] = clamp(values[blueIndex] / 255, 0, 1);
+                }
+            };
+
+            if (header.format === 'ascii') {
+                const body = new TextDecoder().decode(new Uint8Array(buffer, header.headerEnd));
+                const rows = body.split(/\r?\n/).filter(Boolean);
+                for (let i = 0; i < header.vertexCount && i < rows.length; i++) {
+                    writeVertex(i, rows[i].trim().split(/\s+/).map(Number));
+                }
+            } else if (header.format === 'binary_little_endian' || header.format === 'binary_big_endian') {
+                const little = header.format === 'binary_little_endian';
+                const propReaders = header.vertexProperties.map(prop => plyPropertyReader(prop.type));
+                if (propReaders.some(reader => !reader)) return null;
+
+                const stride = propReaders.reduce((sum, reader) => sum + reader.size, 0);
+                const view = new DataView(buffer, header.headerEnd);
+                const values = new Array(propReaders.length);
+                for (let i = 0; i < header.vertexCount; i++) {
+                    let offset = i * stride;
+                    for (let j = 0; j < propReaders.length; j++) {
+                        const reader = propReaders[j];
+                        values[j] = reader.read(view, offset, little);
+                        offset += reader.size;
+                    }
+                    writeVertex(i, values);
+                }
+            } else {
+                return null;
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            return geometry;
+        }
+
+        function createBufferGeometryLoader(parseGeometry) {
+            return {
+                load: (url, onLoad, onProgress, onError) => {
+                    fetch(url)
+                        .then((response) => {
+                            if (!response.ok) throw new Error(`Could not load ${url}`);
+                            return response.arrayBuffer();
+                        })
+                        .then((buffer) => onLoad(parseGeometry(buffer)))
+                        .catch((error) => {
+                            if (onError) onError(error);
+                            else throw error;
+                        });
+                }
+            };
+        }
+
+        function createPlyLoader() {
+            const fallbackLoader = new THREE.PLYLoader();
+            return createBufferGeometryLoader((buffer) => {
+                if (getImportMode() !== 'mesh') {
+                    const gaussianGeometry = createGaussianPlyGeometry(buffer);
+                    if (gaussianGeometry) return gaussianGeometry;
+                }
+                return fallbackLoader.parse(buffer);
+            });
+        }
+
         function getImportExtension(url, fileName = '') {
             const source = fileName || (url && !url.startsWith('blob:') ? url.split('?')[0] : '');
             const match = source.toLowerCase().match(/\.([a-z0-9]+)$/);
@@ -882,7 +1093,8 @@
             if (extension === 'glb' || extension === 'gltf') return new THREE.GLTFLoader();
             if (extension === 'obj') return new THREE.OBJLoader();
             if (extension === 'stl') return new THREE.STLLoader();
-            if (extension === 'ply') return new THREE.PLYLoader();
+            if (extension === 'ply') return createPlyLoader();
+            if (extension === 'splat') return createBufferGeometryLoader(createSplatGeometry);
             return null;
         }
 
@@ -933,6 +1145,10 @@
                 if (importMode === 'mesh') {
                     return { root: createMeshRootFromGeometry(asset), isPointCloud: false };
                 }
+                return { root: createPointRootFromGeometry(asset), isPointCloud: true };
+            }
+
+            if (extension === 'splat') {
                 return { root: createPointRootFromGeometry(asset), isPointCloud: true };
             }
 
@@ -1192,6 +1408,16 @@
         function updatePointDensity() {
             const pct = setPointDrawFraction(document.getElementById('point-count').value);
             document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
+        }
+
+        function setFullPointCloudVisible(visible) {
+            showFullPointCloud = visible;
+            const planes = showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom];
+            pointMaterials.forEach((material) => {
+                material.clippingPlanes = planes;
+                material.needsUpdate = true;
+            });
+            updatePlaneHeight(document.getElementById('slice-slider').value);
         }
         
         function updateBounds() {
@@ -1658,6 +1884,9 @@
                 sliceThickness = clamp(finiteNumber(e.target.value, sliceThickness), SLICE_THICKNESS_MIN, SLICE_THICKNESS_MAX);
                 document.getElementById('point-thick-val').textContent = sliceThickness.toFixed(3);
                 updatePlaneHeight(document.getElementById('slice-slider').value);
+            });
+            document.getElementById('show-full-cloud').addEventListener('change', (e) => {
+                setFullPointCloudVisible(e.target.checked);
             });
 
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
