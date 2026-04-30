@@ -378,6 +378,7 @@
         let activeDownloadUrl = null;
         let modelLoadId = 0;
         let jsZipPromise = null;
+        const gaussianSortMatrix = new THREE.Matrix4();
 
         function finiteNumber(value, fallback = 0) {
             const parsed = Number.parseFloat(value);
@@ -399,6 +400,23 @@
 
         function lerp(start, end, t) {
             return start + (end - start) * t;
+        }
+
+        function writeNormalizedQuaternion(target, index, x, y, z, w) {
+            const length = Math.hypot(x, y, z, w) || 1;
+            const offset = index * 4;
+            target[offset] = x / length;
+            target[offset + 1] = y / length;
+            target[offset + 2] = z / length;
+            target[offset + 3] = w / length;
+        }
+
+        function decodeByteQuaternion(view, offset, target, index) {
+            const x = (view.getUint8(offset) - 128) / 128;
+            const y = (view.getUint8(offset + 1) - 128) / 128;
+            const z = (view.getUint8(offset + 2) - 128) / 128;
+            const w = (view.getUint8(offset + 3) - 128) / 128;
+            writeNormalizedQuaternion(target, index, x, y, z, w);
         }
 
         function greatestCommonDivisor(a, b) {
@@ -682,6 +700,7 @@
             gaussianMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = isOrtho;
                 m.uniforms.uOrthoZoom.value = orthoZoom;
+                m.uniforms.uViewport.value.set(renderer.domElement.width, renderer.domElement.height);
             });
 
             if (isAnimate) {
@@ -699,6 +718,7 @@
             controls.update();
             
             if (renderStyle === 'points' || renderStyle === 'gaussian') {
+                if (renderStyle === 'gaussian') updateGaussianDepthSorting(false);
                 renderer.render(scene, activeCamera);
             } else {
                 performMultiPassRender();
@@ -825,43 +845,115 @@
                 uniforms: {
                     size: { value: pointSize },
                     uIsOrtho: { value: 0.0 },
-                    uOrthoZoom: { value: 1.0 }
+                    uOrthoZoom: { value: 1.0 },
+                    uViewport: { value: new THREE.Vector2(1, 1) }
                 },
                 vertexShader: `
-                    attribute vec3 color;
-                    attribute float splatSize;
-                    attribute float opacity;
+                    attribute vec2 quadPosition;
+                    attribute vec3 instancePosition;
+                    attribute vec3 instanceColor;
+                    attribute float instanceOpacity;
+                    attribute vec3 instanceScale;
+                    attribute vec4 instanceRotation;
                     uniform float size;
                     uniform float uIsOrtho;
                     uniform float uOrthoZoom;
+                    uniform vec2 uViewport;
                     varying vec3 vColor;
                     varying float vOpacity;
+                    varying vec2 vGaussian;
                     #include <clipping_planes_pars_vertex>
+
+                    mat3 quatToMat3(vec4 q) {
+                        q = normalize(q);
+                        float x = q.x, y = q.y, z = q.z, w = q.w;
+                        float x2 = x + x, y2 = y + y, z2 = z + z;
+                        float xx = x * x2, xy = x * y2, xz = x * z2;
+                        float yy = y * y2, yz = y * z2, zz = z * z2;
+                        float wx = w * x2, wy = w * y2, wz = w * z2;
+                        return mat3(
+                            1.0 - (yy + zz), xy + wz, xz - wy,
+                            xy - wz, 1.0 - (xx + zz), yz + wx,
+                            xz + wy, yz - wx, 1.0 - (xx + yy)
+                        );
+                    }
+
+                    mat3 modelViewRotation() {
+                        return mat3(
+                            normalize(modelViewMatrix[0].xyz),
+                            normalize(modelViewMatrix[1].xyz),
+                            normalize(modelViewMatrix[2].xyz)
+                        );
+                    }
+
+                    mat3 outerProduct3(vec3 a, vec3 b) {
+                        return mat3(
+                            a.x * b.x, a.y * b.x, a.z * b.x,
+                            a.x * b.y, a.y * b.y, a.z * b.y,
+                            a.x * b.z, a.y * b.z, a.z * b.z
+                        );
+                    }
+
                     void main() {
-                        vColor = color;
-                        vOpacity = opacity;
-                        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                        float radius = max(splatSize, 0.0001) * max(size, 0.01);
+                        vColor = instanceColor;
+                        vOpacity = instanceOpacity;
+                        vGaussian = quadPosition * 3.0;
+
+                        vec4 mvPosition = modelViewMatrix * vec4(instancePosition, 1.0);
+                        float sizeScale = max(size / ${DEFAULT_POINT_SIZE.toFixed(3)}, 0.001);
+                        vec3 scale = max(instanceScale * sizeScale, vec3(0.00001));
+                        mat3 rotation = modelViewRotation() * quatToMat3(instanceRotation);
+                        vec3 axisX = rotation[0] * scale.x;
+                        vec3 axisY = rotation[1] * scale.y;
+                        vec3 axisZ = rotation[2] * scale.z;
+                        mat3 cov = outerProduct3(axisX, axisX) + outerProduct3(axisY, axisY) + outerProduct3(axisZ, axisZ);
+
+                        float focalX = projectionMatrix[0][0] * uViewport.x * 0.5;
+                        float focalY = projectionMatrix[1][1] * uViewport.y * 0.5;
+                        float depth = max(-mvPosition.z, 0.001);
+                        vec3 j0;
+                        vec3 j1;
                         if (uIsOrtho > 0.5) {
-                            gl_PointSize = clamp(radius * 2600.0 * uOrthoZoom, 1.0, 512.0);
+                            j0 = vec3(focalX, 0.0, 0.0);
+                            j1 = vec3(0.0, focalY, 0.0);
                         } else {
-                            gl_PointSize = clamp(radius * (3600.0 / max(-mvPosition.z, 0.001)), 1.0, 512.0);
+                            j0 = vec3(focalX / depth, 0.0, focalX * mvPosition.x / (depth * depth));
+                            j1 = vec3(0.0, focalY / depth, focalY * mvPosition.y / (depth * depth));
                         }
-                        gl_Position = projectionMatrix * mvPosition;
+
+                        float a = dot(j0, cov * j0) + 0.35;
+                        float b = dot(j0, cov * j1);
+                        float c = dot(j1, cov * j1) + 0.35;
+                        float mid = 0.5 * (a + c);
+                        float radius = length(vec2(0.5 * (a - c), b));
+                        float lambda1 = clamp(mid + radius, 0.01, 65536.0);
+                        float lambda2 = clamp(mid - radius, 0.01, 65536.0);
+                        vec2 axis1 = abs(b) > 0.00001 || abs(lambda1 - a) > 0.00001
+                            ? normalize(vec2(b, lambda1 - a))
+                            : vec2(1.0, 0.0);
+                        vec2 axis2 = vec2(-axis1.y, axis1.x);
+                        vec2 pixelOffset = 3.0 * (
+                            axis1 * quadPosition.x * sqrt(lambda1) +
+                            axis2 * quadPosition.y * sqrt(lambda2)
+                        );
+
+                        vec4 clip = projectionMatrix * mvPosition;
+                        clip.xy += (pixelOffset / uViewport) * 2.0 * clip.w;
+                        gl_Position = clip;
                         #include <clipping_planes_vertex>
                     }
                 `,
                 fragmentShader: `
                     varying vec3 vColor;
                     varying float vOpacity;
+                    varying vec2 vGaussian;
                     #include <clipping_planes_pars_fragment>
                     void main() {
                         #include <clipping_planes_fragment>
-                        vec2 p = gl_PointCoord * 2.0 - 1.0;
-                        float r2 = dot(p, p);
-                        if (r2 > 1.0) discard;
-                        float alpha = exp(-4.0 * r2) * vOpacity;
-                        if (alpha < 0.01) discard;
+                        float r2 = dot(vGaussian, vGaussian);
+                        if (r2 > 9.0) discard;
+                        float alpha = exp(-0.5 * r2) * vOpacity;
+                        if (alpha < 0.003) discard;
                         gl_FragColor = vec4(vColor, alpha);
                     }
                 `,
@@ -983,6 +1075,8 @@
             const colors = new Float32Array(count * 3);
             const sizes = new Float32Array(count);
             const opacities = new Float32Array(count);
+            const scales = new Float32Array(count * 3);
+            const rotations = new Float32Array(count * 4);
 
             for (let i = 0; i < count; i++) {
                 const offset = i * bytesPerSplat;
@@ -993,12 +1087,16 @@
                 const sx = Math.abs(view.getFloat32(offset + 12, true));
                 const sy = Math.abs(view.getFloat32(offset + 16, true));
                 const sz = Math.abs(view.getFloat32(offset + 20, true));
+                scales[i * 3] = sx;
+                scales[i * 3 + 1] = sy;
+                scales[i * 3 + 2] = sz;
                 sizes[i] = Math.max(sx, sy, sz, 0.0001);
 
                 colors[i * 3] = view.getUint8(offset + 24) / 255;
                 colors[i * 3 + 1] = view.getUint8(offset + 25) / 255;
                 colors[i * 3 + 2] = view.getUint8(offset + 26) / 255;
                 opacities[i] = view.getUint8(offset + 27) / 255;
+                decodeByteQuaternion(view, offset + 28, rotations, i);
             }
 
             const geometry = new THREE.BufferGeometry();
@@ -1006,6 +1104,8 @@
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             geometry.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
             geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            geometry.setAttribute('splatScale', new THREE.BufferAttribute(scales, 3));
+            geometry.setAttribute('splatRotation', new THREE.BufferAttribute(rotations, 4));
             geometry.userData.isGaussianSplat = true;
             return geometry;
         }
@@ -1089,6 +1189,7 @@
             const hasFdcColor = ['f_dc_0', 'f_dc_1', 'f_dc_2'].every(name => names.includes(name));
             const hasRgbColor = ['red', 'green', 'blue'].every(name => names.includes(name));
             const hasScale = ['scale_0', 'scale_1', 'scale_2'].every(name => names.includes(name));
+            const hasRotation = ['rot_0', 'rot_1', 'rot_2', 'rot_3'].every(name => names.includes(name));
             const hasGaussianProps = hasFdcColor || names.includes('opacity') || names.includes('scale_0') || names.includes('rot_0');
             if (!hasPosition || (!hasGaussianProps && !hasRgbColor)) return null;
 
@@ -1096,6 +1197,8 @@
             const colors = new Float32Array(header.vertexCount * 3);
             const sizes = new Float32Array(header.vertexCount);
             const opacities = new Float32Array(header.vertexCount);
+            const scales = new Float32Array(header.vertexCount * 3);
+            const rotations = new Float32Array(header.vertexCount * 4);
             const propIndex = (name) => names.indexOf(name);
             const xIndex = propIndex('x');
             const yIndex = propIndex('y');
@@ -1103,6 +1206,10 @@
             const s0Index = propIndex('scale_0');
             const s1Index = propIndex('scale_1');
             const s2Index = propIndex('scale_2');
+            const r0Index = propIndex('rot_0');
+            const r1Index = propIndex('rot_1');
+            const r2Index = propIndex('rot_2');
+            const r3Index = propIndex('rot_3');
             const f0Index = propIndex('f_dc_0');
             const f1Index = propIndex('f_dc_1');
             const f2Index = propIndex('f_dc_2');
@@ -1120,9 +1227,24 @@
                 const opacity = opacityIndex >= 0 ? sigmoid(values[opacityIndex]) : 1;
                 opacities[i] = opacity;
                 if (hasScale) {
-                    sizes[i] = Math.max(Math.exp(values[s0Index]), Math.exp(values[s1Index]), Math.exp(values[s2Index]), 0.0001);
+                    const sx = Math.exp(values[s0Index]);
+                    const sy = Math.exp(values[s1Index]);
+                    const sz = Math.exp(values[s2Index]);
+                    scales[i * 3] = sx;
+                    scales[i * 3 + 1] = sy;
+                    scales[i * 3 + 2] = sz;
+                    sizes[i] = Math.max(sx, sy, sz, 0.0001);
                 } else {
+                    scales[i * 3] = 0.01;
+                    scales[i * 3 + 1] = 0.01;
+                    scales[i * 3 + 2] = 0.01;
                     sizes[i] = 0.01;
+                }
+
+                if (hasRotation) {
+                    writeNormalizedQuaternion(rotations, i, values[r1Index], values[r2Index], values[r3Index], values[r0Index]);
+                } else {
+                    writeNormalizedQuaternion(rotations, i, 0, 0, 0, 1);
                 }
 
                 if (hasFdcColor) {
@@ -1168,6 +1290,8 @@
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             geometry.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
             geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            geometry.setAttribute('splatScale', new THREE.BufferAttribute(scales, 3));
+            geometry.setAttribute('splatRotation', new THREE.BufferAttribute(rotations, 4));
             geometry.userData.isGaussianSplat = hasGaussianProps;
             return geometry;
         }
@@ -1286,6 +1410,21 @@
             return Math.sign(value) * (Math.exp(Math.abs(value)) - 1);
         }
 
+        function decodeSogQuaternion(data, offset, target, index) {
+            const toComponent = (value) => (value / 255 - 0.5) * 2.0 / Math.SQRT2;
+            const a = toComponent(data[offset]);
+            const b = toComponent(data[offset + 1]);
+            const c = toComponent(data[offset + 2]);
+            const mode = data[offset + 3] - 252;
+            const d = Math.sqrt(Math.max(0, 1 - a * a - b * b - c * c));
+
+            if (mode === 0) writeNormalizedQuaternion(target, index, d, a, b, c);
+            else if (mode === 1) writeNormalizedQuaternion(target, index, a, d, b, c);
+            else if (mode === 2) writeNormalizedQuaternion(target, index, a, b, d, c);
+            else if (mode === 3) writeNormalizedQuaternion(target, index, a, b, c, d);
+            else writeNormalizedQuaternion(target, index, 0, 0, 0, 1);
+        }
+
         async function createSogGeometry(buffer) {
             const JSZip = await loadJSZip();
             const zip = await JSZip.loadAsync(buffer);
@@ -1297,16 +1436,18 @@
 
             const meansFiles = requireArray(meta.means?.files, 2, 'means files');
             const scalesFiles = requireArray(meta.scales?.files, 1, 'scales files');
+            const quatsFiles = requireArray(meta.quats?.files, 1, 'quats files');
             const sh0Files = requireArray(meta.sh0?.files, 1, 'sh0 files');
             const meansMins = requireArray(meta.means?.mins, 3, 'means mins');
             const meansMaxs = requireArray(meta.means?.maxs, 3, 'means maxs');
             const scalesCodebook = requireArray(meta.scales?.codebook, 256, 'scales codebook');
             const sh0Codebook = requireArray(meta.sh0?.codebook, 256, 'sh0 codebook');
 
-            const [meansL, meansU, scalesImage, sh0Image] = await Promise.all([
+            const [meansL, meansU, scalesImage, quatsImage, sh0Image] = await Promise.all([
                 decodeSogImage(zip, basePath, meansFiles[0]),
                 decodeSogImage(zip, basePath, meansFiles[1]),
                 decodeSogImage(zip, basePath, scalesFiles[0]),
+                decodeSogImage(zip, basePath, quatsFiles[0]),
                 decodeSogImage(zip, basePath, sh0Files[0])
             ]);
 
@@ -1314,6 +1455,7 @@
                 meansL.width * meansL.height,
                 meansU.width * meansU.height,
                 scalesImage.width * scalesImage.height,
+                quatsImage.width * quatsImage.height,
                 sh0Image.width * sh0Image.height
             );
             const count = finiteInteger(meta.count, capacity);
@@ -1324,10 +1466,13 @@
             const colors = new Float32Array(count * 3);
             const sizes = new Float32Array(count);
             const opacities = new Float32Array(count);
+            const scales = new Float32Array(count * 3);
+            const rotations = new Float32Array(count * 4);
             const shC0 = 0.28209479177387814;
             const meansLData = meansL.data;
             const meansUData = meansU.data;
             const scalesData = scalesImage.data;
+            const quatsData = quatsImage.data;
             const sh0Data = sh0Image.data;
 
             for (let i = 0; i < count; i++) {
@@ -1346,7 +1491,11 @@
                 const sx = Math.abs(scalesCodebook[scalesData[p]] ?? 0);
                 const sy = Math.abs(scalesCodebook[scalesData[p + 1]] ?? 0);
                 const sz = Math.abs(scalesCodebook[scalesData[p + 2]] ?? 0);
+                scales[i * 3] = sx;
+                scales[i * 3 + 1] = sy;
+                scales[i * 3 + 2] = sz;
                 sizes[i] = Math.max(sx, sy, sz, 0.0001);
+                decodeSogQuaternion(quatsData, p, rotations, i);
 
                 colors[i * 3] = clamp(0.5 + (sh0Codebook[sh0Data[p]] ?? 0) * shC0, 0, 1);
                 colors[i * 3 + 1] = clamp(0.5 + (sh0Codebook[sh0Data[p + 1]] ?? 0) * shC0, 0, 1);
@@ -1359,6 +1508,8 @@
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             geometry.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
             geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            geometry.setAttribute('splatScale', new THREE.BufferAttribute(scales, 3));
+            geometry.setAttribute('splatRotation', new THREE.BufferAttribute(rotations, 4));
             geometry.userData.isGaussianSplat = true;
             geometry.userData.sourceFormat = 'sog';
             return geometry;
@@ -1486,14 +1637,146 @@
             return root;
         }
 
+        function createDynamicInstanceAttribute(array, itemSize) {
+            const attr = new THREE.InstancedBufferAttribute(array, itemSize);
+            if (THREE.DynamicDrawUsage) attr.setUsage(THREE.DynamicDrawUsage);
+            return attr;
+        }
+
+        function createGaussianInstanceGeometry(count) {
+            const geometry = new THREE.InstancedBufferGeometry();
+            geometry.setIndex(new THREE.BufferAttribute(new Uint16Array([0, 1, 2, 0, 2, 3]), 1));
+            geometry.setAttribute('quadPosition', new THREE.BufferAttribute(new Float32Array([
+                -1, -1,
+                 1, -1,
+                 1,  1,
+                -1,  1
+            ]), 2));
+            geometry.setAttribute('instancePosition', createDynamicInstanceAttribute(new Float32Array(count * 3), 3));
+            geometry.setAttribute('instanceColor', createDynamicInstanceAttribute(new Float32Array(count * 3), 3));
+            geometry.setAttribute('instanceOpacity', createDynamicInstanceAttribute(new Float32Array(count), 1));
+            geometry.setAttribute('instanceScale', createDynamicInstanceAttribute(new Float32Array(count * 3), 3));
+            geometry.setAttribute('instanceRotation', createDynamicInstanceAttribute(new Float32Array(count * 4), 4));
+            geometry.instanceCount = count;
+            geometry.maxInstancedCount = count;
+            return geometry;
+        }
+
+        function copyGaussianInstances(mesh, count) {
+            const data = mesh.userData;
+            const attrs = mesh.geometry.attributes;
+            const positions = attrs.instancePosition.array;
+            const colors = attrs.instanceColor.array;
+            const opacities = attrs.instanceOpacity.array;
+            const scales = attrs.instanceScale.array;
+            const rotations = attrs.instanceRotation.array;
+            const source = data.source;
+
+            for (let out = 0; out < count; out++) {
+                const src = data.order[out];
+                positions[out * 3] = source.positions[src * 3];
+                positions[out * 3 + 1] = source.positions[src * 3 + 1];
+                positions[out * 3 + 2] = source.positions[src * 3 + 2];
+                colors[out * 3] = source.colors[src * 3];
+                colors[out * 3 + 1] = source.colors[src * 3 + 1];
+                colors[out * 3 + 2] = source.colors[src * 3 + 2];
+                opacities[out] = source.opacities[src];
+                scales[out * 3] = source.scales[src * 3];
+                scales[out * 3 + 1] = source.scales[src * 3 + 1];
+                scales[out * 3 + 2] = source.scales[src * 3 + 2];
+                rotations[out * 4] = source.rotations[src * 4];
+                rotations[out * 4 + 1] = source.rotations[src * 4 + 1];
+                rotations[out * 4 + 2] = source.rotations[src * 4 + 2];
+                rotations[out * 4 + 3] = source.rotations[src * 4 + 3];
+            }
+
+            attrs.instancePosition.needsUpdate = true;
+            attrs.instanceColor.needsUpdate = true;
+            attrs.instanceOpacity.needsUpdate = true;
+            attrs.instanceScale.needsUpdate = true;
+            attrs.instanceRotation.needsUpdate = true;
+        }
+
+        function setGaussianRendererDrawCount(mesh, count) {
+            const clamped = Math.max(1, Math.min(mesh.userData.maxCount, count));
+            mesh.userData.drawCount = clamped;
+            mesh.userData.needsSort = true;
+            mesh.geometry.instanceCount = clamped;
+            mesh.geometry.maxInstancedCount = clamped;
+        }
+
+        function sortGaussianRenderer(mesh, force = false) {
+            const data = mesh.userData;
+            const count = Math.min(data.drawCount || data.maxCount, data.maxCount);
+            if (count <= 0) return;
+
+            const now = performance.now();
+            if (!force && !data.needsSort && now - data.lastSortTime < 160) return;
+
+            mesh.updateMatrixWorld(true);
+            activeCamera.updateMatrixWorld(true);
+            gaussianSortMatrix.multiplyMatrices(activeCamera.matrixWorldInverse, mesh.matrixWorld);
+            const e = gaussianSortMatrix.elements;
+            const positions = data.source.positions;
+            const preview = data.previewIndices;
+
+            for (let i = 0; i < count; i++) {
+                const src = preview ? preview[i] : i;
+                const x = positions[src * 3];
+                const y = positions[src * 3 + 1];
+                const z = positions[src * 3 + 2];
+                data.order[i] = src;
+                data.depths[src] = e[2] * x + e[6] * y + e[10] * z + e[14];
+            }
+
+            data.order.subarray(0, count).sort((a, b) => data.depths[a] - data.depths[b]);
+            copyGaussianInstances(mesh, count);
+            data.lastSortTime = now;
+            data.needsSort = false;
+        }
+
+        function updateGaussianDepthSorting(force = false) {
+            gaussianGroup.updateMatrixWorld(true);
+            gaussianGroup.traverse((node) => {
+                if (node.userData.isGaussianSplatRenderer) sortGaussianRenderer(node, force);
+            });
+        }
+
         function createGaussianRootFromGeometry(geometry) {
-            if (!geometry.attributes.position || !geometry.attributes.splatSize || !geometry.attributes.opacity || !geometry.attributes.color) return null;
+            if (
+                !geometry.attributes.position ||
+                !geometry.attributes.splatScale ||
+                !geometry.attributes.splatRotation ||
+                !geometry.attributes.opacity ||
+                !geometry.attributes.color
+            ) return null;
             const maxCount = preparePreviewDensityGeometry(geometry);
             const material = createGaussianSplatMaterial();
             gaussianMaterials.push(material);
 
-            const splats = new THREE.Points(geometry, material);
+            const instanceGeometry = createGaussianInstanceGeometry(maxCount);
+            const splats = new THREE.Mesh(instanceGeometry, material);
+            splats.userData.isGaussianSplatRenderer = true;
+            splats.userData.sourceGeometry = geometry;
             splats.userData.maxCount = maxCount;
+            splats.userData.drawCount = Math.max(1, Math.floor(maxCount * pointDrawFraction));
+            splats.userData.previewIndices = geometry.index?.array || null;
+            splats.userData.order = new Uint32Array(maxCount);
+            splats.userData.depths = new Float32Array(maxCount);
+            splats.userData.lastSortTime = 0;
+            splats.userData.needsSort = true;
+            splats.userData.source = {
+                positions: geometry.attributes.position.array,
+                colors: geometry.attributes.color.array,
+                opacities: geometry.attributes.opacity.array,
+                scales: geometry.attributes.splatScale.array,
+                rotations: geometry.attributes.splatRotation.array
+            };
+            setGaussianRendererDrawCount(splats, splats.userData.drawCount);
+            for (let i = 0; i < splats.userData.drawCount; i++) {
+                splats.userData.order[i] = splats.userData.previewIndices ? splats.userData.previewIndices[i] : i;
+            }
+            copyGaussianInstances(splats, splats.userData.drawCount);
             splats.frustumCulled = false;
 
             const root = new THREE.Group();
@@ -1625,32 +1908,51 @@
         }
 
         function normalizeGaussianSplatSizes(root, modelScale) {
-            const attributes = [];
+            const records = [];
             const seen = new Set();
             root.traverse((node) => {
-                const attr = node.geometry?.attributes?.splatSize;
-                if (!attr || seen.has(attr.array)) return;
-                seen.add(attr.array);
-                attributes.push(attr);
+                const sourceGeometry = node.userData.sourceGeometry || node.geometry;
+                const sizeAttr = sourceGeometry?.attributes?.splatSize;
+                if (!sizeAttr || seen.has(sizeAttr.array)) return;
+                seen.add(sizeAttr.array);
+                records.push({
+                    sizeAttr,
+                    scaleAttr: sourceGeometry.attributes.splatScale || null,
+                    renderer: node.userData.isGaussianSplatRenderer ? node : null
+                });
             });
-            if (!attributes.length) return;
+            if (!records.length) return;
 
             const samples = [];
-            attributes.forEach((attr) => {
-                const stride = Math.max(1, Math.floor(attr.array.length / 20000));
-                for (let i = 0; i < attr.array.length; i += stride) {
-                    const size = attr.array[i] * modelScale;
+            records.forEach(({ sizeAttr }) => {
+                const stride = Math.max(1, Math.floor(sizeAttr.array.length / 20000));
+                for (let i = 0; i < sizeAttr.array.length; i += stride) {
+                    const size = sizeAttr.array[i] * modelScale;
                     if (Number.isFinite(size) && size > 0) samples.push(size);
                 }
             });
 
             const reference = percentile(samples, 0.75) || GAUSSIAN_REFERENCE_RADIUS;
             const normalization = GAUSSIAN_REFERENCE_RADIUS / reference;
-            attributes.forEach((attr) => {
-                for (let i = 0; i < attr.array.length; i++) {
-                    attr.array[i] = clamp(attr.array[i] * modelScale * normalization, GAUSSIAN_MIN_RADIUS, GAUSSIAN_MAX_RADIUS);
+            records.forEach(({ sizeAttr, scaleAttr, renderer }) => {
+                if (scaleAttr) {
+                    for (let i = 0; i < sizeAttr.array.length; i++) {
+                        const sx = clamp(scaleAttr.array[i * 3] * modelScale * normalization, GAUSSIAN_MIN_RADIUS, GAUSSIAN_MAX_RADIUS);
+                        const sy = clamp(scaleAttr.array[i * 3 + 1] * modelScale * normalization, GAUSSIAN_MIN_RADIUS, GAUSSIAN_MAX_RADIUS);
+                        const sz = clamp(scaleAttr.array[i * 3 + 2] * modelScale * normalization, GAUSSIAN_MIN_RADIUS, GAUSSIAN_MAX_RADIUS);
+                        scaleAttr.array[i * 3] = sx;
+                        scaleAttr.array[i * 3 + 1] = sy;
+                        scaleAttr.array[i * 3 + 2] = sz;
+                        sizeAttr.array[i] = Math.max(sx, sy, sz);
+                    }
+                    scaleAttr.needsUpdate = true;
+                } else {
+                    for (let i = 0; i < sizeAttr.array.length; i++) {
+                        sizeAttr.array[i] = clamp(sizeAttr.array[i] * modelScale * normalization, GAUSSIAN_MIN_RADIUS, GAUSSIAN_MAX_RADIUS);
+                    }
                 }
-                attr.needsUpdate = true;
+                sizeAttr.needsUpdate = true;
+                if (renderer) renderer.userData.needsSort = true;
             });
         }
 
@@ -1881,7 +2183,10 @@
                 }
             });
             gaussianGroup.traverse(o => {
-                if(o.isPoints && o.userData.maxCount) {
+                if (o.userData.isGaussianSplatRenderer && o.userData.maxCount) {
+                    const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
+                    setGaussianRendererDrawCount(o, count);
+                } else if(o.isPoints && o.userData.maxCount) {
                     const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
                     o.geometry.setDrawRange(0, count);
                 }
@@ -1927,6 +2232,9 @@
             flipModelVertical = document.getElementById('flip-model').checked;
             const euler = getOrientationEuler();
             forEachActiveWrapper((wrapper) => applyWrapperTransform(wrapper, euler));
+            gaussianGroup.traverse((node) => {
+                if (node.userData.isGaussianSplatRenderer) node.userData.needsSort = true;
+            });
             
             updateBounds();
             if (!isAnimate) {
@@ -2104,6 +2412,7 @@
             gaussianMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = 1.0;
                 m.uniforms.uOrthoZoom.value = 1.0;
+                m.uniforms.uViewport.value.set(renderer.domElement.width, renderer.domElement.height);
             });
 
             const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
@@ -2112,6 +2421,7 @@
             if (renderStyle === 'mesh') {
                 performMultiPassRender();
             } else {
+                if (renderStyle === 'gaussian') updateGaussianDepthSorting(true);
                 renderPointExportFrame();
             }
         }
