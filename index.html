@@ -109,6 +109,10 @@
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     </div>
                     <div id="orientation-controls" class="space-y-2 hidden pt-1">
+                        <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                            <span>Flip Vertical</span>
+                            <input type="checkbox" id="flip-model" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                        </label>
                         <div class="flex items-center gap-2">
                             <span class="text-[10px] font-bold text-red-500 w-3">X</span>
                             <input type="range" id="rot-x" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
@@ -192,9 +196,10 @@
                      <label class="text-xs font-bold uppercase text-gray-500 block">Appearance</label>
                      
                      <!-- Render Style Switch -->
-                     <div class="bg-gray-800/50 p-1 rounded flex gap-1">
-                         <button id="style-mesh" class="flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('mesh')">Solid Mesh</button>
-                         <button id="style-points" class="flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('points')">Point Cloud</button>
+                     <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
+                         <button id="style-mesh" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('mesh')">Solid Mesh</button>
+                         <button id="style-points" class="text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('points')">Point Cloud</button>
+                         <button id="style-gaussian" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('gaussian')">Gaussian</button>
                      </div>
 
                      <!-- Mesh Options -->
@@ -228,9 +233,9 @@
                      
                      <!-- Point Options -->
                      <div id="point-options" class="space-y-3">
-                         <div>
+                        <div>
                             <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point Size</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point / Splat Size</label>
                                 <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.10</span>
                             </div>
                             <input type="range" id="point-size" min="0.02" max="1.0" step="0.005" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
@@ -272,8 +277,8 @@
                     </div>
                     <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group mb-2">
                         <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Model or Point Cloud</span>
-                        <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply,.splat" class="hidden"/>
-                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">GLB, GLTF, OBJ, STL, PLY, SPLAT</span>
+                        <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply,.splat,.sog" class="hidden"/>
+                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">GLB, GLTF, OBJ, STL, PLY, SPLAT, SOG</span>
                     </label>
                     <button id="btn-reset" class="w-full py-1 text-[10px] font-bold text-gray-500 hover:text-white bg-transparent border border-gray-700 hover:bg-gray-700 rounded transition-all">
                         Reset to Default Model
@@ -312,6 +317,9 @@
         const DEFAULT_POINT_SIZE = 0.1;
         const POINT_SIZE_MIN = 0.02;
         const POINT_SIZE_MAX = 1.0;
+        const GAUSSIAN_REFERENCE_RADIUS = 0.012;
+        const GAUSSIAN_MIN_RADIUS = 0.0015;
+        const GAUSSIAN_MAX_RADIUS = 0.06;
         const DEFAULT_POINT_DENSITY = 0.1;
         const EXPORT_POINT_DENSITY = 1.0;
         const DEFAULT_SLICE_THICKNESS = 0.001;
@@ -322,9 +330,9 @@
         let scene, renderer, controls;
         let perspectiveCamera, orthoCamera, activeCamera;
         let orthoCamera3D; // New camera for 3D ortho view
-        let visualGroup, stencilGroup, capGroup; 
-        let pointGroup; 
-        let activeWrappers = { visual: null, back: null, front: null, points: null };
+        let visualGroup, stencilGroup, capGroup;
+        let pointGroup, gaussianGroup;
+        let activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
         
         let clippingPlane;
         const slabPlaneTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
@@ -338,10 +346,12 @@
         let modelBounds = { min: -1, max: 1 };
         let viewMode = '3d';
         let renderStyle = 'points';
+        let flipModelVertical = false;
         let isOrtho3D = false; // Toggle state for 3D projection
         
         let capMaterial, backMat, frontMat;
-        let pointMaterials = []; 
+        let pointMaterials = [];
+        let gaussianMaterials = [];
         let isPanelOpen = true;
         
         // Post Processing Vars
@@ -367,6 +377,7 @@
         let activeUploadUrl = null;
         let activeDownloadUrl = null;
         let modelLoadId = 0;
+        let jsZipPromise = null;
 
         function finiteNumber(value, fallback = 0) {
             const parsed = Number.parseFloat(value);
@@ -384,6 +395,26 @@
 
         function clamp(value, min, max) {
             return Math.min(max, Math.max(min, value));
+        }
+
+        function lerp(start, end, t) {
+            return start + (end - start) * t;
+        }
+
+        function greatestCommonDivisor(a, b) {
+            while (b !== 0) {
+                const next = a % b;
+                a = b;
+                b = next;
+            }
+            return Math.abs(a);
+        }
+
+        function loadJSZip() {
+            if (!jsZipPromise) {
+                jsZipPromise = import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm').then(module => module.default);
+            }
+            return jsZipPromise;
         }
 
         function evenPositiveInteger(value, fallback) {
@@ -552,18 +583,22 @@
             visualGroup = new THREE.Group();
             stencilGroup = new THREE.Group();
             capGroup = new THREE.Group();
-            pointGroup = new THREE.Group(); 
-            pointGroup.visible = false; 
+            pointGroup = new THREE.Group();
+            gaussianGroup = new THREE.Group();
+            pointGroup.visible = false;
+            gaussianGroup.visible = false;
             
             visualGroup.renderOrder = 0;
             stencilGroup.renderOrder = 1;
             capGroup.renderOrder = 2;
             pointGroup.renderOrder = 3;
+            gaussianGroup.renderOrder = 4;
 
             scene.add(visualGroup);
             scene.add(stencilGroup); 
             scene.add(capGroup);
             scene.add(pointGroup);
+            scene.add(gaussianGroup);
 
             // 10. Helper
             const frameGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)); 
@@ -644,6 +679,10 @@
                 m.uniforms.uIsOrtho.value = isOrtho;
                 m.uniforms.uOrthoZoom.value = orthoZoom;
             });
+            gaussianMaterials.forEach(m => {
+                m.uniforms.uIsOrtho.value = isOrtho;
+                m.uniforms.uOrthoZoom.value = orthoZoom;
+            });
 
             if (isAnimate) {
                 time += 0.01 * scanSpeed;
@@ -659,7 +698,7 @@
 
             controls.update();
             
-            if (renderStyle === 'points') {
+            if (renderStyle === 'points' || renderStyle === 'gaussian') {
                 renderer.render(scene, activeCamera);
             } else {
                 performMultiPassRender();
@@ -676,6 +715,7 @@
             capGroup.visible = true;     
             frameHelper.visible = false; 
             pointGroup.visible = false; 
+            gaussianGroup.visible = false;
 
             renderer.setRenderTarget(renderTarget);
             renderer.clear();
@@ -777,6 +817,60 @@
                 clipping: true,
                 transparent: false,
                 clippingPlanes: showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom]
+            });
+        };
+
+        const createGaussianSplatMaterial = () => {
+            return new THREE.ShaderMaterial({
+                uniforms: {
+                    size: { value: pointSize },
+                    uIsOrtho: { value: 0.0 },
+                    uOrthoZoom: { value: 1.0 }
+                },
+                vertexShader: `
+                    attribute vec3 color;
+                    attribute float splatSize;
+                    attribute float opacity;
+                    uniform float size;
+                    uniform float uIsOrtho;
+                    uniform float uOrthoZoom;
+                    varying vec3 vColor;
+                    varying float vOpacity;
+                    #include <clipping_planes_pars_vertex>
+                    void main() {
+                        vColor = color;
+                        vOpacity = opacity;
+                        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                        float radius = max(splatSize, 0.0001) * max(size, 0.01);
+                        if (uIsOrtho > 0.5) {
+                            gl_PointSize = clamp(radius * 2600.0 * uOrthoZoom, 1.0, 512.0);
+                        } else {
+                            gl_PointSize = clamp(radius * (3600.0 / max(-mvPosition.z, 0.001)), 1.0, 512.0);
+                        }
+                        gl_Position = projectionMatrix * mvPosition;
+                        #include <clipping_planes_vertex>
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vColor;
+                    varying float vOpacity;
+                    #include <clipping_planes_pars_fragment>
+                    void main() {
+                        #include <clipping_planes_fragment>
+                        vec2 p = gl_PointCoord * 2.0 - 1.0;
+                        float r2 = dot(p, p);
+                        if (r2 > 1.0) discard;
+                        float alpha = exp(-4.0 * r2) * vOpacity;
+                        if (alpha < 0.01) discard;
+                        gl_FragColor = vec4(vColor, alpha);
+                    }
+                `,
+                clipping: true,
+                clippingPlanes: showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom],
+                transparent: true,
+                depthTest: true,
+                depthWrite: false,
+                blending: THREE.NormalBlending
             });
         };
         
@@ -887,6 +981,8 @@
             const view = new DataView(buffer);
             const positions = new Float32Array(count * 3);
             const colors = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const opacities = new Float32Array(count);
 
             for (let i = 0; i < count; i++) {
                 const offset = i * bytesPerSplat;
@@ -894,14 +990,23 @@
                 positions[i * 3 + 1] = view.getFloat32(offset + 4, true);
                 positions[i * 3 + 2] = view.getFloat32(offset + 8, true);
 
+                const sx = Math.abs(view.getFloat32(offset + 12, true));
+                const sy = Math.abs(view.getFloat32(offset + 16, true));
+                const sz = Math.abs(view.getFloat32(offset + 20, true));
+                sizes[i] = Math.max(sx, sy, sz, 0.0001);
+
                 colors[i * 3] = view.getUint8(offset + 24) / 255;
                 colors[i * 3 + 1] = view.getUint8(offset + 25) / 255;
                 colors[i * 3 + 2] = view.getUint8(offset + 26) / 255;
+                opacities[i] = view.getUint8(offset + 27) / 255;
             }
 
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            geometry.userData.isGaussianSplat = true;
             return geometry;
         }
 
@@ -983,15 +1088,21 @@
             const hasPosition = ['x', 'y', 'z'].every(name => names.includes(name));
             const hasFdcColor = ['f_dc_0', 'f_dc_1', 'f_dc_2'].every(name => names.includes(name));
             const hasRgbColor = ['red', 'green', 'blue'].every(name => names.includes(name));
+            const hasScale = ['scale_0', 'scale_1', 'scale_2'].every(name => names.includes(name));
             const hasGaussianProps = hasFdcColor || names.includes('opacity') || names.includes('scale_0') || names.includes('rot_0');
             if (!hasPosition || (!hasGaussianProps && !hasRgbColor)) return null;
 
             const positions = new Float32Array(header.vertexCount * 3);
             const colors = new Float32Array(header.vertexCount * 3);
+            const sizes = new Float32Array(header.vertexCount);
+            const opacities = new Float32Array(header.vertexCount);
             const propIndex = (name) => names.indexOf(name);
             const xIndex = propIndex('x');
             const yIndex = propIndex('y');
             const zIndex = propIndex('z');
+            const s0Index = propIndex('scale_0');
+            const s1Index = propIndex('scale_1');
+            const s2Index = propIndex('scale_2');
             const f0Index = propIndex('f_dc_0');
             const f1Index = propIndex('f_dc_1');
             const f2Index = propIndex('f_dc_2');
@@ -1006,11 +1117,18 @@
                 positions[i * 3 + 1] = values[yIndex];
                 positions[i * 3 + 2] = values[zIndex];
 
+                const opacity = opacityIndex >= 0 ? sigmoid(values[opacityIndex]) : 1;
+                opacities[i] = opacity;
+                if (hasScale) {
+                    sizes[i] = Math.max(Math.exp(values[s0Index]), Math.exp(values[s1Index]), Math.exp(values[s2Index]), 0.0001);
+                } else {
+                    sizes[i] = 0.01;
+                }
+
                 if (hasFdcColor) {
-                    const opacity = opacityIndex >= 0 ? sigmoid(values[opacityIndex]) : 1;
-                    colors[i * 3] = clamp((0.5 + shC0 * values[f0Index]) * opacity, 0, 1);
-                    colors[i * 3 + 1] = clamp((0.5 + shC0 * values[f1Index]) * opacity, 0, 1);
-                    colors[i * 3 + 2] = clamp((0.5 + shC0 * values[f2Index]) * opacity, 0, 1);
+                    colors[i * 3] = clamp(0.5 + shC0 * values[f0Index], 0, 1);
+                    colors[i * 3 + 1] = clamp(0.5 + shC0 * values[f1Index], 0, 1);
+                    colors[i * 3 + 2] = clamp(0.5 + shC0 * values[f2Index], 0, 1);
                 } else {
                     colors[i * 3] = clamp(values[redIndex] / 255, 0, 1);
                     colors[i * 3 + 1] = clamp(values[greenIndex] / 255, 0, 1);
@@ -1048,7 +1166,247 @@
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            geometry.userData.isGaussianSplat = hasGaussianProps;
             return geometry;
+        }
+
+        function normalizeZipPath(path) {
+            return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+        }
+
+        function findSogMetaFile(zip) {
+            const rootMeta = zip.file('meta.json');
+            if (rootMeta) return { file: rootMeta, basePath: '' };
+
+            const metaPath = Object.keys(zip.files).find(name => {
+                const entry = zip.files[name];
+                return !entry.dir && normalizeZipPath(name).toLowerCase().endsWith('/meta.json');
+            });
+            if (!metaPath) throw new Error('SOG archive is missing meta.json.');
+
+            return {
+                file: zip.files[metaPath],
+                basePath: normalizeZipPath(metaPath).replace(/\/?meta\.json$/i, '')
+            };
+        }
+
+        function findSogZipFile(zip, basePath, fileName) {
+            const relativePath = normalizeZipPath(fileName);
+            const candidates = [
+                normalizeZipPath(basePath ? `${basePath}/${relativePath}` : relativePath),
+                relativePath
+            ].filter(Boolean);
+
+            for (const candidate of candidates) {
+                const file = zip.file(candidate);
+                if (file) return { file, name: candidate };
+            }
+
+            const lowerPath = relativePath.toLowerCase();
+            const match = Object.keys(zip.files).find(name => {
+                const entry = zip.files[name];
+                const normalized = normalizeZipPath(name).toLowerCase();
+                return !entry.dir && (normalized === lowerPath || normalized.endsWith(`/${lowerPath}`));
+            });
+            if (match) return { file: zip.files[match], name: match };
+
+            throw new Error(`SOG archive is missing ${fileName}.`);
+        }
+
+        function guessImageMimeType(fileName) {
+            const extension = getImportExtension('', fileName);
+            if (extension === 'png') return 'image/png';
+            if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+            return 'image/webp';
+        }
+
+        async function loadImageElement(blob) {
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                const url = URL.createObjectURL(blob);
+                image.onload = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(image);
+                };
+                image.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('Could not decode SOG image.'));
+                };
+                image.src = url;
+            });
+        }
+
+        async function decodeImageData(blob) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) throw new Error('Could not create SOG image decoder.');
+
+            let bitmap = null;
+            let source = null;
+            try {
+                if (window.createImageBitmap) {
+                    try {
+                        bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+                    } catch (error) {
+                        bitmap = await createImageBitmap(blob);
+                    }
+                    source = bitmap;
+                } else {
+                    source = await loadImageElement(blob);
+                }
+            } catch (error) {
+                source = await loadImageElement(blob);
+            }
+
+            canvas.width = source.width;
+            canvas.height = source.height;
+            ctx.drawImage(source, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (bitmap && bitmap.close) bitmap.close();
+            return imageData;
+        }
+
+        async function decodeSogImage(zip, basePath, fileName) {
+            const entry = findSogZipFile(zip, basePath, fileName);
+            const imageBuffer = await entry.file.async('arraybuffer');
+            const blob = new Blob([imageBuffer], { type: guessImageMimeType(entry.name) });
+            return decodeImageData(blob);
+        }
+
+        function requireArray(value, length, label) {
+            if (!Array.isArray(value) || value.length < length) {
+                throw new Error(`SOG ${label} is missing or incomplete.`);
+            }
+            return value;
+        }
+
+        function unlogSogPosition(value) {
+            return Math.sign(value) * (Math.exp(Math.abs(value)) - 1);
+        }
+
+        async function createSogGeometry(buffer) {
+            const JSZip = await loadJSZip();
+            const zip = await JSZip.loadAsync(buffer);
+            const { file: metaFile, basePath } = findSogMetaFile(zip);
+            const meta = JSON.parse(await metaFile.async('string'));
+            if (meta.version !== 2) {
+                throw new Error(`Unsupported SOG version ${meta.version || 'unknown'}.`);
+            }
+
+            const meansFiles = requireArray(meta.means?.files, 2, 'means files');
+            const scalesFiles = requireArray(meta.scales?.files, 1, 'scales files');
+            const sh0Files = requireArray(meta.sh0?.files, 1, 'sh0 files');
+            const meansMins = requireArray(meta.means?.mins, 3, 'means mins');
+            const meansMaxs = requireArray(meta.means?.maxs, 3, 'means maxs');
+            const scalesCodebook = requireArray(meta.scales?.codebook, 256, 'scales codebook');
+            const sh0Codebook = requireArray(meta.sh0?.codebook, 256, 'sh0 codebook');
+
+            const [meansL, meansU, scalesImage, sh0Image] = await Promise.all([
+                decodeSogImage(zip, basePath, meansFiles[0]),
+                decodeSogImage(zip, basePath, meansFiles[1]),
+                decodeSogImage(zip, basePath, scalesFiles[0]),
+                decodeSogImage(zip, basePath, sh0Files[0])
+            ]);
+
+            const capacity = Math.min(
+                meansL.width * meansL.height,
+                meansU.width * meansU.height,
+                scalesImage.width * scalesImage.height,
+                sh0Image.width * sh0Image.height
+            );
+            const count = finiteInteger(meta.count, capacity);
+            if (count <= 0) throw new Error('SOG contains no splats.');
+            if (count > capacity) throw new Error('SOG count exceeds image capacity.');
+
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const opacities = new Float32Array(count);
+            const shC0 = 0.28209479177387814;
+            const meansLData = meansL.data;
+            const meansUData = meansU.data;
+            const scalesData = scalesImage.data;
+            const sh0Data = sh0Image.data;
+
+            for (let i = 0; i < count; i++) {
+                const p = i * 4;
+                const qx = (meansUData[p] << 8) | meansLData[p];
+                const qy = (meansUData[p + 1] << 8) | meansLData[p + 1];
+                const qz = (meansUData[p + 2] << 8) | meansLData[p + 2];
+                const nx = lerp(meansMins[0], meansMaxs[0], qx / 65535);
+                const ny = lerp(meansMins[1], meansMaxs[1], qy / 65535);
+                const nz = lerp(meansMins[2], meansMaxs[2], qz / 65535);
+
+                positions[i * 3] = unlogSogPosition(nx);
+                positions[i * 3 + 1] = unlogSogPosition(ny);
+                positions[i * 3 + 2] = unlogSogPosition(nz);
+
+                const sx = Math.abs(scalesCodebook[scalesData[p]] ?? 0);
+                const sy = Math.abs(scalesCodebook[scalesData[p + 1]] ?? 0);
+                const sz = Math.abs(scalesCodebook[scalesData[p + 2]] ?? 0);
+                sizes[i] = Math.max(sx, sy, sz, 0.0001);
+
+                colors[i * 3] = clamp(0.5 + (sh0Codebook[sh0Data[p]] ?? 0) * shC0, 0, 1);
+                colors[i * 3 + 1] = clamp(0.5 + (sh0Codebook[sh0Data[p + 1]] ?? 0) * shC0, 0, 1);
+                colors[i * 3 + 2] = clamp(0.5 + (sh0Codebook[sh0Data[p + 2]] ?? 0) * shC0, 0, 1);
+                opacities[i] = sh0Data[p + 3] / 255;
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            geometry.userData.isGaussianSplat = true;
+            geometry.userData.sourceFormat = 'sog';
+            return geometry;
+        }
+
+        function canUsePreviewIndex(count) {
+            if (count <= 65535) return true;
+            return !!(
+                renderer &&
+                (
+                    renderer.capabilities?.isWebGL2 ||
+                    renderer.extensions?.get?.('OES_element_index_uint')
+                )
+            );
+        }
+
+        function createPreviewIndexAttribute(count) {
+            const IndexArray = count > 65535 ? Uint32Array : Uint16Array;
+            const indices = new IndexArray(count);
+            let stride = Math.max(1, Math.floor(count * 0.618033988749895));
+            if (stride % 2 === 0) stride++;
+            while (greatestCommonDivisor(stride, count) !== 1) {
+                stride += 2;
+                if (stride >= count) stride = (stride % count) || 1;
+            }
+
+            let value = 0;
+            for (let i = 0; i < count; i++) {
+                indices[i] = value;
+                value = (value + stride) % count;
+            }
+
+            return new THREE.BufferAttribute(indices, 1);
+        }
+
+        function preparePreviewDensityGeometry(geometry) {
+            const position = geometry.attributes.position;
+            if (!position) return 0;
+
+            const count = position.count;
+            if (!geometry.userData.previewIndexReady && count > 1 && canUsePreviewIndex(count)) {
+                geometry.setIndex(createPreviewIndexAttribute(count));
+                geometry.userData.previewIndexReady = true;
+            }
+
+            geometry.userData.previewCount = geometry.index ? geometry.index.count : count;
+            geometry.setDrawRange(0, Math.max(1, Math.floor(geometry.userData.previewCount * pointDrawFraction)));
+            return geometry.userData.previewCount;
         }
 
         function createBufferGeometryLoader(parseGeometry) {
@@ -1059,7 +1417,8 @@
                             if (!response.ok) throw new Error(`Could not load ${url}`);
                             return response.arrayBuffer();
                         })
-                        .then((buffer) => onLoad(parseGeometry(buffer)))
+                        .then((buffer) => Promise.resolve(parseGeometry(buffer)))
+                        .then((geometry) => onLoad(geometry))
                         .catch((error) => {
                             if (onError) onError(error);
                             else throw error;
@@ -1095,6 +1454,7 @@
             if (extension === 'stl') return new THREE.STLLoader();
             if (extension === 'ply') return createPlyLoader();
             if (extension === 'splat') return createBufferGeometryLoader(createSplatGeometry);
+            if (extension === 'sog') return createBufferGeometryLoader(createSogGeometry);
             return null;
         }
 
@@ -1113,11 +1473,12 @@
 
         function createPointRootFromGeometry(geometry, color = 0xffffff) {
             if (!geometry.attributes.position) return null;
+            const maxCount = preparePreviewDensityGeometry(geometry);
             const material = createPointMaterial(null, color, !!geometry.attributes.color, false);
             pointMaterials.push(material);
 
             const points = new THREE.Points(geometry, material);
-            points.userData.maxCount = geometry.attributes.position.count;
+            points.userData.maxCount = maxCount;
             points.frustumCulled = false;
 
             const root = new THREE.Group();
@@ -1125,34 +1486,68 @@
             return root;
         }
 
+        function createGaussianRootFromGeometry(geometry) {
+            if (!geometry.attributes.position || !geometry.attributes.splatSize || !geometry.attributes.opacity || !geometry.attributes.color) return null;
+            const maxCount = preparePreviewDensityGeometry(geometry);
+            const material = createGaussianSplatMaterial();
+            gaussianMaterials.push(material);
+
+            const splats = new THREE.Points(geometry, material);
+            splats.userData.maxCount = maxCount;
+            splats.frustumCulled = false;
+
+            const root = new THREE.Group();
+            root.add(splats);
+            return root;
+        }
+
         function normalizeImportedAsset(asset, extension, importMode) {
             if (extension === 'glb' || extension === 'gltf') {
-                return { root: asset.scene, isPointCloud: false };
+                return { root: asset.scene, isPointCloud: false, gaussianRoot: null, preferGaussian: false };
             }
 
             if (extension === 'obj') {
-                return { root: asset, isPointCloud: false };
+                return { root: asset, isPointCloud: false, gaussianRoot: null, preferGaussian: false };
             }
 
             if (extension === 'stl') {
                 if (importMode === 'points') {
-                    return { root: createPointRootFromGeometry(asset), isPointCloud: true };
+                    return { root: createPointRootFromGeometry(asset), isPointCloud: true, gaussianRoot: null, preferGaussian: false };
                 }
-                return { root: createMeshRootFromGeometry(asset), isPointCloud: false };
+                return { root: createMeshRootFromGeometry(asset), isPointCloud: false, gaussianRoot: null, preferGaussian: false };
             }
 
             if (extension === 'ply') {
                 if (importMode === 'mesh') {
-                    return { root: createMeshRootFromGeometry(asset), isPointCloud: false };
+                    return { root: createMeshRootFromGeometry(asset), isPointCloud: false, gaussianRoot: null, preferGaussian: false };
                 }
-                return { root: createPointRootFromGeometry(asset), isPointCloud: true };
+                return {
+                    root: createPointRootFromGeometry(asset),
+                    isPointCloud: true,
+                    gaussianRoot: createGaussianRootFromGeometry(asset),
+                    preferGaussian: !!asset.userData.isGaussianSplat
+                };
             }
 
             if (extension === 'splat') {
-                return { root: createPointRootFromGeometry(asset), isPointCloud: true };
+                return {
+                    root: createPointRootFromGeometry(asset),
+                    isPointCloud: true,
+                    gaussianRoot: createGaussianRootFromGeometry(asset),
+                    preferGaussian: true
+                };
             }
 
-            return { root: null, isPointCloud: false };
+            if (extension === 'sog') {
+                return {
+                    root: createPointRootFromGeometry(asset),
+                    isPointCloud: true,
+                    gaussianRoot: createGaussianRootFromGeometry(asset),
+                    preferGaussian: true
+                };
+            }
+
+            return { root: null, isPointCloud: false, gaussianRoot: null, preferGaussian: false };
         }
 
         function disposeLoadedAsset(asset, extension) {
@@ -1172,6 +1567,33 @@
         function applyToMaterials(material, callback) {
             const materials = Array.isArray(material) ? material : [material];
             materials.forEach((m) => { if (m) callback(m); });
+        }
+
+        function getOrientationEuler() {
+            const rx = clamp(finiteNumber(document.getElementById('rot-x').value, 0), 0, 360) * (Math.PI / 180);
+            const ry = clamp(finiteNumber(document.getElementById('rot-y').value, 0), 0, 360) * (Math.PI / 180);
+            const rz = clamp(finiteNumber(document.getElementById('rot-z').value, 0), 0, 360) * (Math.PI / 180);
+            return new THREE.Euler(rx, ry, rz, 'XYZ');
+        }
+
+        function forEachActiveWrapper(callback) {
+            const seen = new Set();
+            Object.values(activeWrappers).forEach((wrapper) => {
+                if (!wrapper || seen.has(wrapper)) return;
+                seen.add(wrapper);
+                callback(wrapper);
+            });
+        }
+
+        function applyWrapperTransform(wrapper, euler) {
+            const baseScale = wrapper.userData.baseScale || Math.abs(wrapper.scale.x) || 1;
+            wrapper.rotation.copy(euler);
+            wrapper.scale.set(baseScale, flipModelVertical ? -baseScale : baseScale, baseScale);
+        }
+
+        function setWrapperBaseScale(wrapper, scale) {
+            wrapper.userData.baseScale = scale;
+            applyWrapperTransform(wrapper, new THREE.Euler());
         }
 
         function finishModelLoad(status, statusText, spinner) {
@@ -1195,18 +1617,67 @@
             updatePointDensity();
         }
 
-        function installPointCloudRoot(root, rawBox, scale) {
+        function percentile(values, pct) {
+            if (!values.length) return 0;
+            values.sort((a, b) => a - b);
+            const index = Math.min(values.length - 1, Math.max(0, Math.floor((values.length - 1) * pct)));
+            return values[index];
+        }
+
+        function normalizeGaussianSplatSizes(root, modelScale) {
+            const attributes = [];
+            const seen = new Set();
+            root.traverse((node) => {
+                const attr = node.geometry?.attributes?.splatSize;
+                if (!attr || seen.has(attr.array)) return;
+                seen.add(attr.array);
+                attributes.push(attr);
+            });
+            if (!attributes.length) return;
+
+            const samples = [];
+            attributes.forEach((attr) => {
+                const stride = Math.max(1, Math.floor(attr.array.length / 20000));
+                for (let i = 0; i < attr.array.length; i += stride) {
+                    const size = attr.array[i] * modelScale;
+                    if (Number.isFinite(size) && size > 0) samples.push(size);
+                }
+            });
+
+            const reference = percentile(samples, 0.75) || GAUSSIAN_REFERENCE_RADIUS;
+            const normalization = GAUSSIAN_REFERENCE_RADIUS / reference;
+            attributes.forEach((attr) => {
+                for (let i = 0; i < attr.array.length; i++) {
+                    attr.array[i] = clamp(attr.array[i] * modelScale * normalization, GAUSSIAN_MIN_RADIUS, GAUSSIAN_MAX_RADIUS);
+                }
+                attr.needsUpdate = true;
+            });
+        }
+
+        function installPointCloudRoot(root, rawBox, scale, gaussianRoot = null) {
             const center = rawBox.getCenter(new THREE.Vector3());
             const pointWrapper = new THREE.Group();
+            if (gaussianRoot) normalizeGaussianSplatSizes(gaussianRoot, scale);
+
             root.position.copy(center).negate();
             pointWrapper.add(root);
-            pointWrapper.scale.set(scale, scale, scale);
+            setWrapperBaseScale(pointWrapper, scale);
             pointGroup.add(pointWrapper);
+
+            let gaussianWrapper = null;
+            if (gaussianRoot) {
+                gaussianWrapper = new THREE.Group();
+                gaussianRoot.position.copy(center).negate();
+                gaussianWrapper.add(gaussianRoot);
+                setWrapperBaseScale(gaussianWrapper, scale);
+                gaussianGroup.add(gaussianWrapper);
+            }
 
             activeWrappers.visual = pointWrapper;
             activeWrappers.back = null;
             activeWrappers.front = null;
             activeWrappers.points = pointWrapper;
+            activeWrappers.gaussian = gaussianWrapper;
         }
 
         function installMeshRoot(root, rawBox, scale) {
@@ -1215,22 +1686,22 @@
             const visWrapper = new THREE.Group();
             root.position.copy(center).negate();
             visWrapper.add(root);
-            visWrapper.scale.set(scale, scale, scale);
+            setWrapperBaseScale(visWrapper, scale);
 
             const backWrapper = new THREE.Group();
             const backRoot = root.clone();
             backWrapper.add(backRoot);
-            backWrapper.scale.set(scale, scale, scale);
+            setWrapperBaseScale(backWrapper, scale);
 
             const frontWrapper = new THREE.Group();
             const frontRoot = root.clone();
             frontWrapper.add(frontRoot);
-            frontWrapper.scale.set(scale, scale, scale);
+            setWrapperBaseScale(frontWrapper, scale);
 
             const pointWrapper = new THREE.Group();
             pointWrapper.position.copy(visWrapper.position);
             pointWrapper.rotation.copy(visWrapper.rotation);
-            pointWrapper.scale.set(scale, scale, scale);
+            setWrapperBaseScale(pointWrapper, scale);
 
             const setupStencil = (mesh, mat) => {
                 mesh.material = mat;
@@ -1294,8 +1765,9 @@
                         const mat = createPointMaterial(sourceMaterial?.map, sourceMaterial?.color || 0xffffff, !!sampledGeo.attributes.color, !!sampledGeo.attributes.uv);
                         pointMaterials.push(mat);
 
+                        const maxCount = preparePreviewDensityGeometry(sampledGeo);
                         const p = new THREE.Points(sampledGeo, mat);
-                        p.userData.maxCount = count;
+                        p.userData.maxCount = maxCount;
 
                         item.obj.geometry = sampledGeo;
                         item.obj.material = mat;
@@ -1325,9 +1797,10 @@
             activeWrappers.back = backWrapper;
             activeWrappers.front = frontWrapper;
             activeWrappers.points = pointWrapper;
+            activeWrappers.gaussian = null;
         }
 
-        function installImportedRoot(root, isPointCloud, status, statusText, spinner) {
+        function installImportedRoot(root, isPointCloud, gaussianRoot, status, statusText, spinner) {
             if (!root) {
                 setLoadingError(statusText, spinner, "Unsupported import.");
                 return;
@@ -1346,7 +1819,7 @@
             const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
             const scale = 2 / maxDim;
 
-            if (isPointCloud) installPointCloudRoot(root, rawBox, scale);
+            if (isPointCloud) installPointCloudRoot(root, rawBox, scale, gaussianRoot);
             else installMeshRoot(root, rawBox, scale);
 
             finishModelLoad(status, statusText, spinner);
@@ -1380,12 +1853,17 @@
                 clearGroup(visualGroup);
                 clearGroup(stencilGroup);
                 clearGroup(pointGroup);
+                clearGroup(gaussianGroup);
 
                 pointMaterials = [];
-                activeWrappers = { visual: null, back: null, front: null, points: null };
+                gaussianMaterials = [];
+                activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
 
                 const imported = normalizeImportedAsset(asset, extension, getImportMode());
-                installImportedRoot(imported.root, imported.isPointCloud, status, statusText, spinner);
+                if (imported.preferGaussian && getImportMode() !== 'points') {
+                    renderStyle = 'gaussian';
+                }
+                installImportedRoot(imported.root, imported.isPointCloud, imported.gaussianRoot, status, statusText, spinner);
 
             }, undefined, (e) => {
                 if (loadId !== modelLoadId) return;
@@ -1398,7 +1876,13 @@
             pointDrawFraction = clamp(finiteNumber(fraction, DEFAULT_POINT_DENSITY), 0.01, 1.0);
             pointGroup.traverse(o => {
                 if(o.isPoints && o.userData.maxCount) {
-                    const count = Math.floor(o.userData.maxCount * pointDrawFraction);
+                    const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
+                    o.geometry.setDrawRange(0, count);
+                }
+            });
+            gaussianGroup.traverse(o => {
+                if(o.isPoints && o.userData.maxCount) {
+                    const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
                     o.geometry.setDrawRange(0, count);
                 }
             });
@@ -1414,6 +1898,10 @@
             showFullPointCloud = visible;
             const planes = showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom];
             pointMaterials.forEach((material) => {
+                material.clippingPlanes = planes;
+                material.needsUpdate = true;
+            });
+            gaussianMaterials.forEach((material) => {
                 material.clippingPlanes = planes;
                 material.needsUpdate = true;
             });
@@ -1436,15 +1924,9 @@
 
         function updateOrientation() {
             if (!activeWrappers.visual) return;
-            const rx = clamp(finiteNumber(document.getElementById('rot-x').value, 0), 0, 360) * (Math.PI / 180);
-            const ry = clamp(finiteNumber(document.getElementById('rot-y').value, 0), 0, 360) * (Math.PI / 180);
-            const rz = clamp(finiteNumber(document.getElementById('rot-z').value, 0), 0, 360) * (Math.PI / 180);
-            const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
-            
-            activeWrappers.visual.rotation.copy(euler);
-            if(activeWrappers.back) activeWrappers.back.rotation.copy(euler);
-            if(activeWrappers.front) activeWrappers.front.rotation.copy(euler);
-            if(activeWrappers.points) activeWrappers.points.rotation.copy(euler);
+            flipModelVertical = document.getElementById('flip-model').checked;
+            const euler = getOrientationEuler();
+            forEachActiveWrapper((wrapper) => applyWrapperTransform(wrapper, euler));
             
             updateBounds();
             if (!isAnimate) {
@@ -1480,33 +1962,53 @@
             if (style === 'mesh' && activeWrappers.visual && (!activeWrappers.back || !activeWrappers.front)) {
                 style = 'points';
             }
+            if (style === 'gaussian' && !activeWrappers.gaussian) {
+                style = 'points';
+            }
             renderStyle = style;
             const btnMesh = document.getElementById('style-mesh');
             const btnPoints = document.getElementById('style-points');
+            const btnGaussian = document.getElementById('style-gaussian');
             const meshOpts = document.getElementById('mesh-options');
             const pointOpts = document.getElementById('point-options');
-            
+
+            btnMesh.className = "text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+            btnPoints.className = "text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+            btnGaussian.className = "text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+
             if (style === 'mesh') {
-                btnMesh.className = "flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
-                btnPoints.className = "flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+                btnMesh.className = "text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
                 meshOpts.classList.remove('hidden');
                 pointOpts.classList.add('hidden');
                 
                 pointGroup.visible = false;
+                gaussianGroup.visible = false;
                 visualGroup.visible = document.getElementById('show-mesh').checked;
                 stencilGroup.visible = true;
                 capGroup.visible = true;
-            } else {
-                btnPoints.className = "flex-1 text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
-                btnMesh.className = "flex-1 text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+            } else if (style === 'gaussian') {
+                btnGaussian.className = "text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
                 pointOpts.classList.remove('hidden');
                 meshOpts.classList.add('hidden');
-                
-                pointGroup.visible = true;
+
+                pointGroup.visible = false;
+                gaussianGroup.visible = true;
                 visualGroup.visible = false;
                 stencilGroup.visible = false;
                 capGroup.visible = false;
-                
+
+                updatePlaneHeight(document.getElementById('slice-slider').value);
+            } else {
+                btnPoints.className = "text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
+                pointOpts.classList.remove('hidden');
+                meshOpts.classList.add('hidden');
+
+                pointGroup.visible = true;
+                gaussianGroup.visible = false;
+                visualGroup.visible = false;
+                stencilGroup.visible = false;
+                capGroup.visible = false;
+
                 updatePlaneHeight(document.getElementById('slice-slider').value);
             }
         }
@@ -1567,8 +2069,18 @@
             frameHelper.visible = false;
             if (renderStyle === 'mesh') {
                 visualGroup.visible = false;
+                pointGroup.visible = false;
+                gaussianGroup.visible = false;
+            } else if (renderStyle === 'gaussian') {
+                gaussianGroup.visible = true;
+                pointGroup.visible = false;
+                visualGroup.visible = false;
+                stencilGroup.visible = false;
+                capGroup.visible = false;
+                setPointDrawFraction(EXPORT_POINT_DENSITY);
             } else {
                 pointGroup.visible = true;
+                gaussianGroup.visible = false;
                 visualGroup.visible = false;
                 stencilGroup.visible = false;
                 capGroup.visible = false;
@@ -1586,6 +2098,10 @@
 
         function renderExportFrame(progress) {
             pointMaterials.forEach(m => {
+                m.uniforms.uIsOrtho.value = 1.0;
+                m.uniforms.uOrthoZoom.value = 1.0;
+            });
+            gaussianMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = 1.0;
                 m.uniforms.uOrthoZoom.value = 1.0;
             });
@@ -1716,7 +2232,7 @@
 
                 const timestamp = i * frameDurationUs;
                 const frame = new VideoFrame(renderer.domElement, { timestamp: timestamp });
-                videoEncoder.encode(frame, { keyFrame: renderStyle === 'points' || i % settings.fps === 0 });
+                videoEncoder.encode(frame, { keyFrame: renderStyle === 'points' || renderStyle === 'gaussian' || i % settings.fps === 0 });
                 frame.close();
 
                 updateExportProgress(progress, percentEl, barEl);
@@ -1735,7 +2251,7 @@
         }
 
         async function exportPngSequence(settings, percentEl, barEl) {
-            const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
+            const JSZip = await loadJSZip();
             const zip = new JSZip();
             const folder = zip.folder('frames');
             const totalFrames = Math.max(1, settings.fps * settings.duration);
@@ -1800,8 +2316,9 @@
 
             onWindowResize(); 
             document.getElementById('rec-overlay').classList.add('hidden');
-            
+
             if (viewMode === '3d') setMode('3d'); else setMode('2d');
+            setRenderStyle(renderStyle);
             if(frameHelper) frameHelper.visible = restoreFrame;
             if (typeof restoreMesh !== 'undefined' && renderStyle === 'mesh') {
                 visualGroup.visible = restoreMesh;
@@ -1852,6 +2369,10 @@
                 revokeActiveUploadUrl();
                 loadModel(DEFAULT_MODEL);
             });
+            document.getElementById('flip-model').addEventListener('change', (e) => {
+                flipModelVertical = e.target.checked;
+                updateOrientation();
+            });
             
             ['x', 'y', 'z'].forEach(axis => {
                 const slider = document.getElementById(`rot-${axis}`);
@@ -1876,6 +2397,7 @@
                 pointSize = clamp(finiteNumber(e.target.value, pointSize), POINT_SIZE_MIN, POINT_SIZE_MAX);
                 document.getElementById('point-size-val').textContent = pointSize.toFixed(2);
                 pointMaterials.forEach(m => m.uniforms.size.value = pointSize);
+                gaussianMaterials.forEach(m => m.uniforms.size.value = pointSize);
             });
             document.getElementById('point-count').addEventListener('input', (e) => {
                 updatePointDensity();
