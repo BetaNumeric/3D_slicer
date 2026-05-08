@@ -290,9 +290,13 @@
                          <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Thickness</label>
-                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.001</span>
+                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.010</span>
                             </div>
-                            <input type="range" id="point-thick" min="0.001" max="0.08" step="0.001" value="0.001" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <select id="slice-thickness-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none mb-2">
+                                <option value="frame-pitch" selected>Frame Pitch</option>
+                                <option value="manual">Manual</option>
+                            </select>
+                            <input type="range" id="point-thick" min="0.00005" max="0.2" step="0.00005" value="0.010" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                          <div class="pt-1 border-t border-gray-800">
                             <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
@@ -362,9 +366,9 @@
         const GAUSSIAN_MAX_RADIUS = 0.06;
         const DEFAULT_POINT_DENSITY = 0.1;
         const EXPORT_POINT_DENSITY = 1.0;
-        const DEFAULT_SLICE_THICKNESS = 0.001;
-        const SLICE_THICKNESS_MIN = 0.001;
-        const SLICE_THICKNESS_MAX = 0.08;
+        const DEFAULT_SLICE_THICKNESS = 0.010;
+        const SLICE_THICKNESS_MIN = 0.00005;
+        const SLICE_THICKNESS_MAX = 0.2;
         const EXPORT_LARGE_WARNING_BYTES = 1.5 * 1024 * 1024 * 1024;
         const EXPORT_ENCODER_QUEUE_LIMIT = 8;
         const PLANE_NORMAL = new THREE.Vector3(0, 0, 1);
@@ -435,6 +439,8 @@
         let pointSize = DEFAULT_POINT_SIZE;
         let pointDrawFraction = DEFAULT_POINT_DENSITY;
         let sliceThickness = DEFAULT_SLICE_THICKNESS;
+        let manualSliceThickness = DEFAULT_SLICE_THICKNESS;
+        let sliceThicknessMode = 'frame-pitch';
         let showFullPointCloud = false;
 
         // Export State
@@ -517,7 +523,7 @@
             sliceAxis = axis;
             configureSliceGeometry();
             updateBounds();
-            updatePlaneHeight(document.getElementById('slice-slider').value);
+            refreshSliceThicknessFromMode();
             updateFrameHelper();
             updateSliceAxisUI();
             if (viewMode === '2d') setMode('2d');
@@ -533,6 +539,73 @@
                 unit++;
             }
             return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+        }
+
+        function formatSliceThickness(value) {
+            if (value < 0.001) return value.toFixed(5);
+            if (value < 0.01) return value.toFixed(4);
+            return value.toFixed(3);
+        }
+
+        function getActiveExportFrameCount(settings) {
+            const totalFrames = getTotalExportFrames(settings);
+            return Math.max(1, totalFrames - settings.blankFrames * 2);
+        }
+
+        function getPitchMatchedSliceThickness(settings) {
+            const span = Math.max(0, modelBounds.max - modelBounds.min);
+            const activeFrames = getActiveExportFrameCount(settings);
+            if (span <= 0) return SLICE_THICKNESS_MIN;
+            if (activeFrames <= 1) return Math.max(SLICE_THICKNESS_MIN, span);
+            const pathMultiplier = settings.motionProfile === 'pingpong' ? 2 : 1;
+            return Math.max(SLICE_THICKNESS_MIN, (span * pathMultiplier) / (activeFrames - 1));
+        }
+
+        function resolveSliceThicknessForSettings(settings) {
+            if (settings.sliceThicknessMode === 'frame-pitch') {
+                return getPitchMatchedSliceThickness(settings);
+            }
+            return clamp(manualSliceThickness, SLICE_THICKNESS_MIN, SLICE_THICKNESS_MAX);
+        }
+
+        function syncSliceThicknessControls() {
+            const modeEl = document.getElementById('slice-thickness-mode');
+            const slider = document.getElementById('point-thick');
+            const valueEl = document.getElementById('point-thick-val');
+            if (!modeEl || !slider || !valueEl) return;
+
+            const isAuto = sliceThicknessMode === 'frame-pitch';
+            modeEl.value = sliceThicknessMode;
+            slider.disabled = isAuto;
+            slider.classList.toggle('opacity-50', isAuto);
+            slider.classList.toggle('cursor-not-allowed', isAuto);
+            slider.value = clamp(manualSliceThickness, SLICE_THICKNESS_MIN, SLICE_THICKNESS_MAX);
+            valueEl.textContent = `${formatSliceThickness(sliceThickness)}${isAuto ? ' pitch' : ''}`;
+        }
+
+        function refreshSliceThicknessFromMode(updatePlane = true) {
+            const modeEl = document.getElementById('slice-thickness-mode');
+            sliceThicknessMode = modeEl?.value || sliceThicknessMode;
+            const settings = getExportSettings();
+            sliceThickness = settings.sliceThicknessModelUnits;
+            syncSliceThicknessControls();
+            if (updatePlane) updatePlaneHeight(document.getElementById('slice-slider').value);
+        }
+
+        function setSliceWindowUniforms(enabled, center = 0, thickness = 0) {
+            const axis = getSliceAxisDefinition().vector;
+            const half = Math.max(0, thickness) / 2;
+            const min = center - half;
+            const max = center + half;
+            const apply = (material) => {
+                if (!material?.uniforms?.uUseSliceWindow) return;
+                material.uniforms.uUseSliceWindow.value = enabled ? 1.0 : 0.0;
+                material.uniforms.uSliceAxis.value.copy(axis);
+                material.uniforms.uSliceMin.value = enabled ? min : -1e20;
+                material.uniforms.uSliceMax.value = enabled ? max : 1e20;
+            };
+            pointMaterials.forEach(apply);
+            gaussianMaterials.forEach(apply);
         }
 
         function yieldToBrowser() {
@@ -851,6 +924,7 @@
             }
 
             controls.update();
+            setSliceWindowUniforms(false);
             
             if (renderStyle === 'points' || renderStyle === 'gaussian') {
                 if (renderStyle === 'gaussian') updateGaussianDepthSorting(false);
@@ -922,19 +996,27 @@
                     size: { value: pointSize },
                     diffuse: { value: new THREE.Color(color) },
                     uIsOrtho: { value: 0.0 },
-                    uOrthoZoom: { value: 1.0 }
+                    uOrthoZoom: { value: 1.0 },
+                    uUseSliceWindow: { value: 0.0 },
+                    uSliceAxis: { value: new THREE.Vector3(0, 1, 0) },
+                    uSliceMin: { value: -1e20 },
+                    uSliceMax: { value: 1e20 }
                 },
                 vertexShader: `
                     ${hasVertexColors ? 'attribute vec3 color;' : ''}
                     uniform float size;
                     uniform float uIsOrtho;
                     uniform float uOrthoZoom;
+                    uniform vec3 uSliceAxis;
                     ${useTexture ? 'varying vec2 vUv;' : ''}
                     ${hasVertexColors ? 'varying vec3 vColor;' : ''}
+                    varying float vSliceCoord;
                     #include <clipping_planes_pars_vertex>
                     void main() {
                         ${useTexture ? 'vUv = uv;' : ''}
                         ${hasVertexColors ? 'vColor = color;' : ''}
+                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                        vSliceCoord = dot(worldPosition.xyz, uSliceAxis);
                         vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
                         
                         if (uIsOrtho > 0.5) {
@@ -952,11 +1034,16 @@
                 fragmentShader: `
                     ${useTexture ? 'uniform sampler2D map;' : ''}
                     uniform vec3 diffuse;
+                    uniform float uUseSliceWindow;
+                    uniform float uSliceMin;
+                    uniform float uSliceMax;
                     ${useTexture ? 'varying vec2 vUv;' : ''}
                     ${hasVertexColors ? 'varying vec3 vColor;' : ''}
+                    varying float vSliceCoord;
                     #include <clipping_planes_pars_fragment>
                     void main() {
                         #include <clipping_planes_fragment>
+                        if (uUseSliceWindow > 0.5 && (vSliceCoord < uSliceMin || vSliceCoord >= uSliceMax)) discard;
                         
                         vec4 color = vec4(diffuse, 1.0);
                         ${hasVertexColors ? 'color *= vec4(vColor, 1.0);' : ''}
@@ -981,7 +1068,11 @@
                     size: { value: pointSize },
                     uIsOrtho: { value: 0.0 },
                     uOrthoZoom: { value: 1.0 },
-                    uViewport: { value: new THREE.Vector2(1, 1) }
+                    uViewport: { value: new THREE.Vector2(1, 1) },
+                    uUseSliceWindow: { value: 0.0 },
+                    uSliceAxis: { value: new THREE.Vector3(0, 1, 0) },
+                    uSliceMin: { value: -1e20 },
+                    uSliceMax: { value: 1e20 }
                 },
                 vertexShader: `
                     attribute vec2 quadPosition;
@@ -994,9 +1085,11 @@
                     uniform float uIsOrtho;
                     uniform float uOrthoZoom;
                     uniform vec2 uViewport;
+                    uniform vec3 uSliceAxis;
                     varying vec3 vColor;
                     varying float vOpacity;
                     varying vec2 vGaussian;
+                    varying float vSliceCoord;
                     #include <clipping_planes_pars_vertex>
 
                     mat3 quatToMat3(vec4 q) {
@@ -1034,6 +1127,8 @@
                         vOpacity = instanceOpacity;
                         vGaussian = quadPosition * 3.0;
 
+                        vec4 worldPosition = modelMatrix * vec4(instancePosition, 1.0);
+                        vSliceCoord = dot(worldPosition.xyz, uSliceAxis);
                         vec4 mvPosition = modelViewMatrix * vec4(instancePosition, 1.0);
                         float sizeScale = max(size / ${DEFAULT_POINT_SIZE.toFixed(3)}, 0.001);
                         vec3 scale = max(instanceScale * sizeScale, vec3(0.00001));
@@ -1082,9 +1177,14 @@
                     varying vec3 vColor;
                     varying float vOpacity;
                     varying vec2 vGaussian;
+                    varying float vSliceCoord;
+                    uniform float uUseSliceWindow;
+                    uniform float uSliceMin;
+                    uniform float uSliceMax;
                     #include <clipping_planes_pars_fragment>
                     void main() {
                         #include <clipping_planes_fragment>
+                        if (uUseSliceWindow > 0.5 && (vSliceCoord < uSliceMin || vSliceCoord >= uSliceMax)) discard;
                         float r2 = dot(vGaussian, vGaussian);
                         if (r2 > 9.0) discard;
                         float alpha = exp(-0.5 * r2) * vOpacity;
@@ -2031,6 +2131,7 @@
             toggleOutlineMode(document.getElementById('outline-mode').checked);
             setRenderStyle(renderStyle);
             resetOrientationUI();
+            refreshSliceThicknessFromMode();
             updateFrameHelper();
             updatePointDensity();
         }
@@ -2334,9 +2435,8 @@
             document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
         }
 
-        function setFullPointCloudVisible(visible) {
-            showFullPointCloud = visible;
-            const planes = showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom];
+        function applyPointClippingPlanes(useSlab) {
+            const planes = useSlab ? [slabPlaneTop, slabPlaneBottom] : [];
             pointMaterials.forEach((material) => {
                 material.clippingPlanes = planes;
                 material.needsUpdate = true;
@@ -2345,6 +2445,11 @@
                 material.clippingPlanes = planes;
                 material.needsUpdate = true;
             });
+        }
+
+        function setFullPointCloudVisible(visible) {
+            showFullPointCloud = visible;
+            applyPointClippingPlanes(!showFullPointCloud);
             updatePlaneHeight(document.getElementById('slice-slider').value);
         }
         
@@ -2375,8 +2480,7 @@
             
             updateBounds();
             if (!isAnimate) {
-                const currentY = finiteNumber(document.getElementById('slice-slider').value, 0);
-                updatePlaneHeight(currentY);
+                refreshSliceThicknessFromMode();
             }
         }
         
@@ -2542,7 +2646,10 @@
             };
         }
 
-        function createManifestFrame(frameInfo, fileName = null) {
+        function createManifestFrame(frameInfo, fileName = null, settings = null) {
+            const thickness = settings && !frameInfo.blank && settings.renderStyle !== 'mesh'
+                ? settings.sliceThicknessModelUnits
+                : null;
             return {
                 index: frameInfo.index,
                 file: fileName,
@@ -2551,6 +2658,9 @@
                 sweepProgress: frameInfo.sweepProgress,
                 sliceProgress: frameInfo.sliceProgress,
                 sliceValueModelUnits: frameInfo.sliceValueModelUnits,
+                sliceThicknessModelUnits: thickness,
+                sliceMinModelUnits: thickness === null ? null : frameInfo.sliceValueModelUnits - thickness / 2,
+                sliceMaxModelUnits: thickness === null ? null : frameInfo.sliceValueModelUnits + thickness / 2,
                 physicalPositionMm: frameInfo.physicalPositionMm
             };
         }
@@ -2581,7 +2691,9 @@
                     axis: getSliceAxisDefinition().label,
                     modelUnitBounds: { min: modelBounds.min, max: modelBounds.max },
                     modelUnitSpan: span,
-                    sliceThicknessModelUnits: settings.renderStyle === 'mesh' ? null : sliceThickness,
+                    sliceThicknessMode: settings.renderStyle === 'mesh' ? null : settings.sliceThicknessMode,
+                    sliceThicknessModelUnits: settings.renderStyle === 'mesh' ? null : settings.sliceThicknessModelUnits,
+                    framePitchModelUnits: settings.renderStyle === 'mesh' ? null : settings.framePitchModelUnits,
                     contentType: settings.renderStyle === 'mesh' ? 'filled-mesh-section' : 'surface-slab'
                 },
                 displayCalibration: {
@@ -2606,7 +2718,8 @@
             const resolved = resolveExportRenderStyle(document.getElementById('export-slice-mode').value);
             const pixelCount = evenPositiveInteger(document.getElementById('export-w').value, 1080) * evenPositiveInteger(document.getElementById('export-h').value, 1080);
             const estimatedBitrate = clamp(Math.round(pixelCount * fps * 0.35), 24_000_000, 140_000_000);
-            return {
+            const thicknessMode = document.getElementById('slice-thickness-mode')?.value || sliceThicknessMode;
+            const settings = {
                 format: document.getElementById('export-format').value,
                 width: evenPositiveInteger(document.getElementById('export-w').value, 1080),
                 height: evenPositiveInteger(document.getElementById('export-h').value, 1080),
@@ -2618,8 +2731,15 @@
                 physicalTravelMm: Math.max(0, finiteNumber(document.getElementById('calibration-travel-mm').value, 100)),
                 blankFrames: clamp(finiteInteger(document.getElementById('calibration-blank-frames').value, 0), 0, maxBlankFrames),
                 motionProfile: document.getElementById('calibration-motion-profile').value,
+                sliceThicknessMode: thicknessMode,
                 estimatedBitrate
             };
+            settings.framePitchModelUnits = getPitchMatchedSliceThickness(settings);
+            settings.sliceThicknessModelUnits = resolveSliceThicknessForSettings(settings);
+            if (settings.sliceThicknessMode === 'frame-pitch' && settings.motionProfile === 'pingpong') {
+                settings.warnings = settings.warnings.concat('Ping-pong motion intentionally revisits slice positions on the return sweep; frame-pitch thickness is matched to adjacent frame travel.');
+            }
+            return settings;
         }
 
         function prepareExportRenderState(settings) {
@@ -2659,6 +2779,7 @@
                 visualGroup.visible = false;
                 stencilGroup.visible = false;
                 capGroup.visible = false;
+                applyPointClippingPlanes(true);
                 setPointDrawFraction(EXPORT_POINT_DENSITY);
             } else {
                 pointGroup.visible = true;
@@ -2666,6 +2787,7 @@
                 visualGroup.visible = false;
                 stencilGroup.visible = false;
                 capGroup.visible = false;
+                applyPointClippingPlanes(true);
                 setPointDrawFraction(EXPORT_POINT_DENSITY);
             }
         }
@@ -2679,6 +2801,7 @@
         }
 
         function renderBlankExportFrame() {
+            setSliceWindowUniforms(false);
             renderer.setRenderTarget(null);
             renderer.autoClear = true;
             renderer.clear(true, true, true);
@@ -2701,6 +2824,16 @@
                 return;
             }
 
+            if (settings.renderStyle !== 'mesh') {
+                sliceThickness = settings.sliceThicknessModelUnits;
+                setSliceWindowUniforms(
+                    settings.sliceThicknessMode === 'frame-pitch',
+                    frameInfo.sliceValueModelUnits,
+                    settings.sliceThicknessModelUnits
+                );
+            } else {
+                setSliceWindowUniforms(false);
+            }
             updatePlaneHeight(frameInfo.sliceValueModelUnits);
 
             if (settings.renderStyle === 'mesh') {
@@ -2827,6 +2960,8 @@
                 }
                 isProcessingVideo = false;
                 setPointDrawFraction(previousPointDrawFraction);
+                refreshSliceThicknessFromMode();
+                setFullPointCloudVisible(showFullPointCloud);
             }
         }
 
@@ -2871,7 +3006,7 @@
                 videoEncoder.encode(frame, { keyFrame: settings.renderStyle === 'points' || settings.renderStyle === 'gaussian' || i % settings.fps === 0 });
                 frame.close();
 
-                manifestFrames.push(createManifestFrame(frameInfo));
+                manifestFrames.push(createManifestFrame(frameInfo, null, settings));
                 updateExportProgress(totalFrames === 1 ? 1 : i / (totalFrames - 1), percentEl, barEl);
 
                 await waitForEncoderQueue(videoEncoder);
@@ -2906,7 +3041,7 @@
                 const blob = await canvasToPngBlob();
                 const filename = `frame_${String(i).padStart(digits, '0')}.png`;
                 folder.file(filename, blob, { binary: true, compression: 'STORE' });
-                manifestFrames.push(createManifestFrame(frameInfo, `frames/${filename}`));
+                manifestFrames.push(createManifestFrame(frameInfo, `frames/${filename}`, settings));
 
                 updateExportProgress(totalFrames === 1 ? 1 : i / (totalFrames - 1), percentEl, barEl);
 
@@ -3008,6 +3143,13 @@
             document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
             document.getElementById('btn-export').addEventListener('click', startExport);
             document.getElementById('export-format').addEventListener('change', updateExportButtonLabel);
+            const refreshAutoThickness = () => {
+                if (sliceThicknessMode === 'frame-pitch') refreshSliceThicknessFromMode();
+            };
+            document.getElementById('export-duration').addEventListener('input', refreshAutoThickness);
+            document.getElementById('export-fps').addEventListener('change', refreshAutoThickness);
+            document.getElementById('calibration-blank-frames').addEventListener('input', refreshAutoThickness);
+            document.getElementById('calibration-motion-profile').addEventListener('change', refreshAutoThickness);
             document.getElementById('btn-reset').addEventListener('click', () => {
                 revokeActiveUploadUrl();
                 loadModel(DEFAULT_MODEL);
@@ -3045,10 +3187,14 @@
             document.getElementById('point-count').addEventListener('input', (e) => {
                 updatePointDensity();
             });
+            document.getElementById('slice-thickness-mode').addEventListener('change', () => {
+                refreshSliceThicknessFromMode();
+            });
             document.getElementById('point-thick').addEventListener('input', (e) => {
-                sliceThickness = clamp(finiteNumber(e.target.value, sliceThickness), SLICE_THICKNESS_MIN, SLICE_THICKNESS_MAX);
-                document.getElementById('point-thick-val').textContent = sliceThickness.toFixed(3);
-                updatePlaneHeight(document.getElementById('slice-slider').value);
+                manualSliceThickness = clamp(finiteNumber(e.target.value, manualSliceThickness), SLICE_THICKNESS_MIN, SLICE_THICKNESS_MAX);
+                sliceThicknessMode = 'manual';
+                document.getElementById('slice-thickness-mode').value = 'manual';
+                refreshSliceThicknessFromMode();
             });
             document.getElementById('show-full-cloud').addEventListener('change', (e) => {
                 setFullPointCloudVisible(e.target.checked);
@@ -3074,6 +3220,7 @@
             });
             updateExportButtonLabel();
             updateSliceAxisUI();
+            refreshSliceThicknessFromMode();
         }
 
         function setMode(mode) {
