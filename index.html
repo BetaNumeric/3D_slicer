@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Inter', sans-serif; }
@@ -109,33 +110,82 @@
                     </div>
                 </div>
 
-                <!-- Orientation Controls -->
+                <!-- Transform & Crop Controls -->
                 <div class="space-y-2 pt-2 border-t border-gray-800">
-                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="document.getElementById('orientation-controls').classList.toggle('hidden');">
-                         <label class="text-[10px] text-gray-500 uppercase font-bold hover:text-gray-300 transition-colors">Model Orientation</label>
+                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="document.getElementById('transform-crop-controls').classList.toggle('hidden');">
+                         <label class="text-[10px] text-gray-500 uppercase font-bold hover:text-gray-300 transition-colors">Transform & Crop</label>
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     </div>
-                    <div id="orientation-controls" class="space-y-2 hidden pt-1">
-                        <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                            <span>Flip Vertical</span>
-                            <input type="checkbox" id="flip-model" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
-                        </label>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-bold text-red-500 w-3">X</span>
-                            <input type="range" id="rot-x" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
-                            <input type="number" id="num-rot-x" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
+                    <div id="transform-crop-controls" class="space-y-4 hidden pt-1">
+                        <div class="space-y-2">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold block">Model Orientation</label>
+                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                <span>Flip Vertical</span>
+                                <input type="checkbox" id="flip-model" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-red-500 w-3">X</span>
+                                <input type="range" id="rot-x" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
+                                <input type="number" id="num-rot-x" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
+                                <input type="range" id="rot-y" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                                <input type="number" id="num-rot-y" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
+                                <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                                <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
+                            </div>
+                            <button onclick="resetOrientation()" class="w-full text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 mt-1 transition-colors">Reset Rotation</button>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
-                            <input type="range" id="rot-y" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
-                            <input type="number" id="num-rot-y" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
+                        <div class="space-y-3 pt-3 border-t border-gray-800">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold block">Crop Cuboid</label>
+                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                <span>Enable Crop</span>
+                                <input type="checkbox" id="crop-enabled" class="w-3 h-3 accent-cyan-500 rounded bg-gray-700 border-gray-600">
+                            </label>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Viewport Handles</label>
+                                <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
+                                    <button type="button" id="crop-mode-move" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Move</button>
+                                    <button type="button" id="crop-mode-scale" class="text-[10px] font-bold py-1 rounded bg-cyan-600 text-white transition-colors shadow">Scale</button>
+                                    <button type="button" id="crop-mode-rotate" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Rotate</button>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Position</label>
+                                    <button type="button" id="crop-fit" class="text-[10px] text-cyan-400 hover:text-cyan-200 font-bold">Fit</button>
+                                </div>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <input type="number" id="crop-pos-x" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop position X">
+                                    <input type="number" id="crop-pos-y" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop position Y">
+                                    <input type="number" id="crop-pos-z" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop position Z">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Size</label>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <input type="number" id="crop-size-x" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop size X">
+                                    <input type="number" id="crop-size-y" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop size Y">
+                                    <input type="number" id="crop-size-z" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop size Z">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Rotation</label>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <input type="number" id="crop-rot-x" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop rotation X">
+                                    <input type="number" id="crop-rot-y" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop rotation Y">
+                                    <input type="number" id="crop-rot-z" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop rotation Z">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" id="crop-apply" class="py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold rounded transition-colors">Apply Crop</button>
+                                <button type="button" id="crop-export-ply" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-100 text-[10px] font-bold rounded border border-cyan-900/60 transition-colors">Export PLY</button>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
-                            <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                            <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
-                        </div>
-                        <button onclick="resetOrientation()" class="w-full text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 mt-1 transition-colors">Reset Rotation</button>
                     </div>
                 </div>
 
@@ -193,9 +243,9 @@
                     <div class="space-y-2 pt-1 border-t border-gray-700">
                         <div class="flex items-center justify-between">
                              <label class="text-[10px] text-gray-500 uppercase font-bold">Frame Scale</label>
-                             <span id="zoom-val" class="text-[10px] text-blue-400 font-mono">1.0x</span>
+                             <input type="number" id="zoom-val" min="0.001" max="2.0" step="0.0001" value="1.000" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
                         </div>
-                        <input type="range" id="zoom-slider" min="0.2" max="2.0" step="0.1" value="1.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        <input type="range" id="zoom-slider" min="0" max="1" step="0.001" value="0.78" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                         
                          <label class="flex items-center gap-2 cursor-pointer mt-1">
                             <input type="checkbox" id="show-frame" class="w-3 h-3 accent-red-500 rounded bg-gray-700 border-gray-600">
@@ -276,9 +326,9 @@
                         <div>
                             <div class="flex justify-between">
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Point / Splat Size</label>
-                                <span id="point-size-val" class="text-[10px] text-blue-400 font-mono">0.10</span>
+                                <input type="number" id="point-size-val" min="0.001" max="1.0" step="0.0001" value="0.0100" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
                             </div>
-                            <input type="range" id="point-size" min="0.02" max="1.0" step="0.005" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-size" min="0" max="1" step="0.001" value="0.333" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
                          <div>
                             <div class="flex justify-between">
@@ -358,8 +408,8 @@
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
         const FRUSTUM_SIZE = 3.0;
         const MAX_POINTS = 5000000;
-        const DEFAULT_POINT_SIZE = 0.1;
-        const POINT_SIZE_MIN = 0.02;
+        const DEFAULT_POINT_SIZE = 0.01;
+        const POINT_SIZE_MIN = 0.001;
         const POINT_SIZE_MAX = 1.0;
         const GAUSSIAN_REFERENCE_RADIUS = 0.012;
         const GAUSSIAN_MIN_RADIUS = 0.0015;
@@ -369,6 +419,10 @@
         const DEFAULT_SLICE_THICKNESS = 0.010;
         const SLICE_THICKNESS_MIN = 0.00005;
         const SLICE_THICKNESS_MAX = 0.2;
+        const FRAME_SCALE_MIN = 0.001;
+        const FRAME_SCALE_MAX = 2.0;
+        const CROP_MIN_SIZE = 0.01;
+        const CROP_FIT_PADDING = 1.02;
         const EXPORT_LARGE_WARNING_BYTES = 1.5 * 1024 * 1024 * 1024;
         const EXPORT_ENCODER_QUEUE_LIMIT = 8;
         const PLANE_NORMAL = new THREE.Vector3(0, 0, 1);
@@ -410,6 +464,7 @@
 
         let capMesh;
         let frameHelper; 
+        let cropBox, cropBoxFill, cropBoxEdges, cropTransformControls;
         let isAnimate = false;
         let scanSpeed = 0.5;
         let time = 0;
@@ -442,6 +497,11 @@
         let manualSliceThickness = DEFAULT_SLICE_THICKNESS;
         let sliceThicknessMode = 'frame-pitch';
         let showFullPointCloud = false;
+        let cropEnabled = false;
+        let cropControlsMode = 'scale';
+        let cropBoxInitialized = false;
+        let isSyncingCropControls = false;
+        const cropPlanes = Array.from({ length: 6 }, () => new THREE.Plane());
 
         // Export State
         let isProcessingVideo = false;
@@ -547,6 +607,41 @@
             return value.toFixed(3);
         }
 
+        function formatFineValue(value) {
+            if (value < 0.01) return value.toFixed(4);
+            if (value < 0.1) return value.toFixed(3);
+            return value.toFixed(2);
+        }
+
+        function valueToLogSlider(value, min, max) {
+            const safeValue = clamp(Math.max(value, min), min, max);
+            return clamp(Math.log(safeValue / min) / Math.log(max / min), 0, 1);
+        }
+
+        function logSliderToValue(value, min, max) {
+            const t = clamp(finiteNumber(value, 0), 0, 1);
+            return min * Math.pow(max / min, t);
+        }
+
+        function setPointSize(value, source = '') {
+            pointSize = clamp(finiteNumber(value, pointSize), POINT_SIZE_MIN, POINT_SIZE_MAX);
+            const slider = document.getElementById('point-size');
+            const input = document.getElementById('point-size-val');
+            if (slider && source !== 'slider') slider.value = valueToLogSlider(pointSize, POINT_SIZE_MIN, POINT_SIZE_MAX).toFixed(3);
+            if (input && source !== 'input') input.value = formatFineValue(pointSize);
+            pointMaterials.forEach(m => m.uniforms.size.value = pointSize);
+            gaussianMaterials.forEach(m => m.uniforms.size.value = pointSize);
+        }
+
+        function setCaptureScale(value, source = '') {
+            captureScale = clamp(finiteNumber(value, captureScale), FRAME_SCALE_MIN, FRAME_SCALE_MAX);
+            const slider = document.getElementById('zoom-slider');
+            const input = document.getElementById('zoom-val');
+            if (slider && source !== 'slider') slider.value = valueToLogSlider(captureScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX).toFixed(3);
+            if (input && source !== 'input') input.value = captureScale.toFixed(3);
+            updateFrameHelper();
+        }
+
         function getActiveExportFrameCount(settings) {
             const totalFrames = getTotalExportFrames(settings);
             return Math.max(1, totalFrames - settings.blankFrames * 2);
@@ -606,6 +701,528 @@
             };
             pointMaterials.forEach(apply);
             gaussianMaterials.forEach(apply);
+        }
+
+        function getPointClippingPlanes(useSlab) {
+            const planes = [];
+            if (useSlab) planes.push(slabPlaneTop, slabPlaneBottom);
+            if (cropEnabled) planes.push(...cropPlanes);
+            return planes;
+        }
+
+        function isCropRenderableStyle() {
+            return renderStyle === 'points' || renderStyle === 'gaussian';
+        }
+
+        function normalizeDegrees(value) {
+            return ((((value + 180) % 360) + 360) % 360) - 180;
+        }
+
+        function setCropPlane(index, normal, point) {
+            cropPlanes[index].normal.copy(normal);
+            cropPlanes[index].constant = -normal.dot(point);
+        }
+
+        function updateCropPlanes() {
+            if (!cropBox) return;
+            cropBox.updateMatrixWorld(true);
+
+            const center = cropBox.getWorldPosition(new THREE.Vector3());
+            const rotation = cropBox.getWorldQuaternion(new THREE.Quaternion());
+            const scale = cropBox.getWorldScale(new THREE.Vector3());
+            const axes = [
+                new THREE.Vector3(1, 0, 0).applyQuaternion(rotation).normalize(),
+                new THREE.Vector3(0, 1, 0).applyQuaternion(rotation).normalize(),
+                new THREE.Vector3(0, 0, 1).applyQuaternion(rotation).normalize()
+            ];
+            const halfExtents = [
+                Math.max(CROP_MIN_SIZE, Math.abs(scale.x)) / 2,
+                Math.max(CROP_MIN_SIZE, Math.abs(scale.y)) / 2,
+                Math.max(CROP_MIN_SIZE, Math.abs(scale.z)) / 2
+            ];
+
+            axes.forEach((axis, axisIndex) => {
+                const facePoint = center.clone().addScaledVector(axis, halfExtents[axisIndex]);
+                setCropPlane(axisIndex * 2, axis.clone().negate(), facePoint);
+                const oppositeNormal = axis.clone();
+                const oppositePoint = center.clone().addScaledVector(axis, -halfExtents[axisIndex]);
+                setCropPlane(axisIndex * 2 + 1, oppositeNormal, oppositePoint);
+            });
+        }
+
+        function setCropInputValue(id, value) {
+            const input = document.getElementById(id);
+            if (!input || document.activeElement === input) return;
+            input.value = value;
+        }
+
+        function syncCropControlsFromBox() {
+            if (!cropBox) return;
+            isSyncingCropControls = true;
+            setCropInputValue('crop-pos-x', cropBox.position.x.toFixed(2));
+            setCropInputValue('crop-pos-y', cropBox.position.y.toFixed(2));
+            setCropInputValue('crop-pos-z', cropBox.position.z.toFixed(2));
+            setCropInputValue('crop-size-x', Math.abs(cropBox.scale.x).toFixed(2));
+            setCropInputValue('crop-size-y', Math.abs(cropBox.scale.y).toFixed(2));
+            setCropInputValue('crop-size-z', Math.abs(cropBox.scale.z).toFixed(2));
+            setCropInputValue('crop-rot-x', normalizeDegrees(THREE.MathUtils.radToDeg(cropBox.rotation.x)).toFixed(0));
+            setCropInputValue('crop-rot-y', normalizeDegrees(THREE.MathUtils.radToDeg(cropBox.rotation.y)).toFixed(0));
+            setCropInputValue('crop-rot-z', normalizeDegrees(THREE.MathUtils.radToDeg(cropBox.rotation.z)).toFixed(0));
+            isSyncingCropControls = false;
+        }
+
+        function sanitizeCropBoxTransform() {
+            if (!cropBox) return;
+            cropBox.scale.set(
+                Math.max(CROP_MIN_SIZE, Math.abs(cropBox.scale.x)),
+                Math.max(CROP_MIN_SIZE, Math.abs(cropBox.scale.y)),
+                Math.max(CROP_MIN_SIZE, Math.abs(cropBox.scale.z))
+            );
+        }
+
+        function applyCropControlsToBox() {
+            if (!cropBox || isSyncingCropControls) return;
+            cropBox.position.set(
+                finiteNumber(document.getElementById('crop-pos-x').value, cropBox.position.x),
+                finiteNumber(document.getElementById('crop-pos-y').value, cropBox.position.y),
+                finiteNumber(document.getElementById('crop-pos-z').value, cropBox.position.z)
+            );
+            cropBox.scale.set(
+                Math.max(CROP_MIN_SIZE, finiteNumber(document.getElementById('crop-size-x').value, Math.abs(cropBox.scale.x))),
+                Math.max(CROP_MIN_SIZE, finiteNumber(document.getElementById('crop-size-y').value, Math.abs(cropBox.scale.y))),
+                Math.max(CROP_MIN_SIZE, finiteNumber(document.getElementById('crop-size-z').value, Math.abs(cropBox.scale.z)))
+            );
+            cropBox.rotation.set(
+                THREE.MathUtils.degToRad(normalizeDegrees(finiteNumber(document.getElementById('crop-rot-x').value, THREE.MathUtils.radToDeg(cropBox.rotation.x)))),
+                THREE.MathUtils.degToRad(normalizeDegrees(finiteNumber(document.getElementById('crop-rot-y').value, THREE.MathUtils.radToDeg(cropBox.rotation.y)))),
+                THREE.MathUtils.degToRad(normalizeDegrees(finiteNumber(document.getElementById('crop-rot-z').value, THREE.MathUtils.radToDeg(cropBox.rotation.z)))),
+                'XYZ'
+            );
+            cropBoxInitialized = true;
+            updateCropPlanes();
+            syncCropControlsFromBox();
+        }
+
+        function fitCropBoxToModel() {
+            const boundsWrapper = getBoundsWrapper();
+            if (!cropBox || !boundsWrapper) return;
+            boundsWrapper.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(boundsWrapper);
+            if (box.isEmpty()) return;
+
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3()).multiplyScalar(CROP_FIT_PADDING);
+            cropBox.position.copy(center);
+            cropBox.rotation.set(0, 0, 0);
+            cropBox.scale.set(
+                Math.max(CROP_MIN_SIZE, size.x),
+                Math.max(CROP_MIN_SIZE, size.y),
+                Math.max(CROP_MIN_SIZE, size.z)
+            );
+            cropBoxInitialized = true;
+            updateCropPlanes();
+            syncCropControlsFromBox();
+        }
+
+        function updateCropModeButtons() {
+            const inactive = "text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+            const active = "text-[10px] font-bold py-1 rounded bg-cyan-600 text-white transition-colors shadow";
+            ['move', 'scale', 'rotate'].forEach((mode) => {
+                const button = document.getElementById(`crop-mode-${mode}`);
+                if (button) button.className = mode === cropControlsMode ? active : inactive;
+            });
+        }
+
+        function setCropControlsMode(mode) {
+            if (!['move', 'scale', 'rotate'].includes(mode)) mode = 'scale';
+            cropControlsMode = mode;
+            if (cropTransformControls) {
+                cropTransformControls.setMode(mode === 'move' ? 'translate' : mode);
+                cropTransformControls.setSpace('local');
+            }
+            updateCropModeButtons();
+        }
+
+        function updateCropTransformCamera() {
+            if (!cropTransformControls || !activeCamera) return;
+            cropTransformControls.camera = activeCamera;
+        }
+
+        function updateCropHelperVisibility() {
+            const visible = cropEnabled && isCropRenderableStyle() && !isProcessingVideo;
+            if (cropBox) cropBox.visible = visible;
+            if (cropTransformControls) {
+                updateCropTransformCamera();
+                if (cropTransformControls.object !== cropBox && cropBox) cropTransformControls.attach(cropBox);
+                cropTransformControls.visible = visible;
+                cropTransformControls.enabled = visible;
+            }
+        }
+
+        function setCropEnabled(enabled) {
+            cropEnabled = enabled;
+            const checkbox = document.getElementById('crop-enabled');
+            if (checkbox) checkbox.checked = cropEnabled;
+            if (cropEnabled && !cropBoxInitialized) fitCropBoxToModel();
+            updateCropPlanes();
+            applyPointClippingPlanes(!showFullPointCloud);
+            updateCropHelperVisibility();
+            syncCropControlsFromBox();
+        }
+
+        function createCropBoxHelper() {
+            cropBox = new THREE.Group();
+            cropBox.name = 'Crop Cuboid';
+            cropBox.renderOrder = 20;
+            cropBox.visible = false;
+
+            const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const fillMaterial = new THREE.MeshBasicMaterial({
+                color: 0x22d3ee,
+                transparent: true,
+                opacity: 0.08,
+                depthTest: false,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            cropBoxFill = new THREE.Mesh(boxGeometry, fillMaterial);
+            cropBoxFill.renderOrder = 20;
+            cropBox.add(cropBoxFill);
+
+            const edgeGeometry = new THREE.EdgesGeometry(boxGeometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({
+                color: 0x67e8f9,
+                transparent: true,
+                opacity: 0.95,
+                depthTest: false,
+                depthWrite: false
+            });
+            cropBoxEdges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+            cropBoxEdges.renderOrder = 21;
+            cropBox.add(cropBoxEdges);
+            scene.add(cropBox);
+
+            if (THREE.TransformControls) {
+                cropTransformControls = new THREE.TransformControls(activeCamera, renderer.domElement);
+                cropTransformControls.size = 0.85;
+                cropTransformControls.visible = false;
+                cropTransformControls.enabled = false;
+                cropTransformControls.attach(cropBox);
+                cropTransformControls.setSpace('local');
+                cropTransformControls.setMode('scale');
+                cropTransformControls.addEventListener('dragging-changed', (event) => {
+                    controls.enabled = !event.value;
+                });
+                cropTransformControls.addEventListener('objectChange', () => {
+                    sanitizeCropBoxTransform();
+                    cropBoxInitialized = true;
+                    updateCropPlanes();
+                    syncCropControlsFromBox();
+                });
+                scene.add(cropTransformControls);
+            }
+
+            cropBox.scale.set(2, 2, 2);
+            updateCropPlanes();
+            syncCropControlsFromBox();
+        }
+
+        function isPointInsideCropVolume(worldPoint) {
+            for (let i = 0; i < cropPlanes.length; i++) {
+                if (cropPlanes[i].distanceToPoint(worldPoint) < -1e-6) return false;
+            }
+            return true;
+        }
+
+        function buildCropKeepMaskFromPositions(positionAttr, matrixWorld) {
+            const count = positionAttr?.count || 0;
+            const keepMask = new Uint8Array(count);
+            const worldPoint = new THREE.Vector3();
+            let keepCount = 0;
+
+            for (let i = 0; i < count; i++) {
+                worldPoint.fromBufferAttribute(positionAttr, i).applyMatrix4(matrixWorld);
+                if (isPointInsideCropVolume(worldPoint)) {
+                    keepMask[i] = 1;
+                    keepCount++;
+                }
+            }
+
+            return { keepMask, keepCount, sourceCount: count };
+        }
+
+        function createFilteredGeometry(sourceGeometry, keepMask, keepCount) {
+            const filtered = new THREE.BufferGeometry();
+            Object.keys(sourceGeometry.attributes).forEach((name) => {
+                const attr = sourceGeometry.attributes[name];
+                if (!attr?.array || attr.isInterleavedBufferAttribute) return;
+
+                const SourceArray = attr.array.constructor;
+                const itemSize = attr.itemSize;
+                const nextArray = new SourceArray(keepCount * itemSize);
+                let out = 0;
+
+                for (let i = 0; i < keepMask.length; i++) {
+                    if (!keepMask[i]) continue;
+                    const src = i * itemSize;
+                    for (let j = 0; j < itemSize; j++) {
+                        nextArray[out++] = attr.array[src + j];
+                    }
+                }
+
+                filtered.setAttribute(name, new THREE.BufferAttribute(nextArray, itemSize, attr.normalized));
+            });
+
+            filtered.userData = { ...sourceGeometry.userData, previewIndexReady: false, previewCount: 0 };
+            return filtered;
+        }
+
+        function createPointCropResult(points) {
+            const geometry = points.geometry;
+            const position = geometry?.attributes?.position;
+            if (!position) return null;
+
+            points.updateMatrixWorld(true);
+            const { keepMask, keepCount, sourceCount } = buildCropKeepMaskFromPositions(position, points.matrixWorld);
+            return {
+                type: 'points',
+                node: points,
+                before: sourceCount,
+                after: keepCount,
+                geometry: keepCount === sourceCount ? null : createFilteredGeometry(geometry, keepMask, keepCount)
+            };
+        }
+
+        function createGaussianCropResult(rendererNode) {
+            const sourceGeometry = rendererNode.userData.sourceGeometry;
+            const position = sourceGeometry?.attributes?.position;
+            if (!position) return null;
+
+            rendererNode.updateMatrixWorld(true);
+            const { keepMask, keepCount, sourceCount } = buildCropKeepMaskFromPositions(position, rendererNode.matrixWorld);
+            return {
+                type: 'gaussian',
+                node: rendererNode,
+                before: sourceCount,
+                after: keepCount,
+                geometry: keepCount === sourceCount ? null : createFilteredGeometry(sourceGeometry, keepMask, keepCount)
+            };
+        }
+
+        function applyPointCropResult(result) {
+            if (!result.geometry) return;
+            const oldGeometry = result.node.geometry;
+            result.node.geometry = result.geometry;
+            result.node.userData.maxCount = preparePreviewDensityGeometry(result.geometry);
+            if (oldGeometry && oldGeometry !== result.geometry) oldGeometry.dispose();
+        }
+
+        function applyGaussianCropResult(result) {
+            if (!result.geometry) return;
+            const node = result.node;
+            const oldSourceGeometry = node.userData.sourceGeometry;
+            const geometry = result.geometry;
+            const maxCount = preparePreviewDensityGeometry(geometry);
+
+            node.userData.sourceGeometry = geometry;
+            node.userData.maxCount = maxCount;
+            node.userData.drawCount = maxCount <= 0 ? 0 : Math.max(1, Math.floor(maxCount * pointDrawFraction));
+            node.userData.previewIndices = geometry.index?.array || null;
+            node.userData.order = new Uint32Array(maxCount);
+            node.userData.depths = new Float32Array(maxCount);
+            node.userData.lastSortTime = 0;
+            node.userData.needsSort = true;
+            node.userData.source = {
+                positions: geometry.attributes.position?.array || new Float32Array(0),
+                colors: geometry.attributes.color?.array || new Float32Array(0),
+                opacities: geometry.attributes.opacity?.array || new Float32Array(0),
+                scales: geometry.attributes.splatScale?.array || new Float32Array(0),
+                rotations: geometry.attributes.splatRotation?.array || new Float32Array(0)
+            };
+
+            setGaussianRendererDrawCount(node, node.userData.drawCount);
+            for (let i = 0; i < node.userData.drawCount; i++) {
+                node.userData.order[i] = node.userData.previewIndices ? node.userData.previewIndices[i] : i;
+            }
+            copyGaussianInstances(node, node.userData.drawCount);
+            if (oldSourceGeometry && oldSourceGeometry !== geometry && oldSourceGeometry !== node.geometry) oldSourceGeometry.dispose();
+        }
+
+        function collectCropResults() {
+            const results = [];
+            pointGroup.updateMatrixWorld(true);
+            gaussianGroup.updateMatrixWorld(true);
+
+            pointGroup.traverse((node) => {
+                if (!node.isPoints) return;
+                const result = createPointCropResult(node);
+                if (result) results.push(result);
+            });
+
+            gaussianGroup.traverse((node) => {
+                if (!node.userData.isGaussianSplatRenderer) return;
+                const result = createGaussianCropResult(node);
+                if (result) results.push(result);
+            });
+
+            return results;
+        }
+
+        function refreshAfterPointDataChange() {
+            updatePointDensity();
+            if (renderStyle === 'gaussian') updateGaussianDepthSorting(true);
+            updateBounds();
+            refreshSliceThicknessFromMode();
+            fitCropBoxToModel();
+            updateFrameHelper();
+            updateCropHelperVisibility();
+        }
+
+        function applyCropToPointData() {
+            if (!cropBox || !activeWrappers.points) {
+                alert("No point cloud data is available to crop.");
+                return;
+            }
+
+            updateCropPlanes();
+            const results = collectCropResults();
+            const before = results.reduce((sum, result) => sum + result.before, 0);
+            const after = results.reduce((sum, result) => sum + result.after, 0);
+
+            if (before <= 0) {
+                alert("No point cloud data is available to crop.");
+                return;
+            }
+            if (after <= 0) {
+                alert("The crop cuboid does not contain any points.");
+                return;
+            }
+
+            results.forEach((result) => {
+                if (result.type === 'points') applyPointCropResult(result);
+                else if (result.type === 'gaussian') applyGaussianCropResult(result);
+            });
+
+            setCropEnabled(false);
+            refreshAfterPointDataChange();
+        }
+
+        function getPointExportNodes() {
+            const nodes = [];
+            pointGroup.updateMatrixWorld(true);
+            pointGroup.traverse((node) => {
+                if (node.isPoints && node.geometry?.attributes?.position) nodes.push(node);
+            });
+            return nodes;
+        }
+
+        function materialDiffuseColor(material) {
+            const mat = Array.isArray(material) ? material[0] : material;
+            if (mat?.uniforms?.diffuse?.value) return mat.uniforms.diffuse.value;
+            if (mat?.color) return mat.color;
+            return new THREE.Color(1, 1, 1);
+        }
+
+        function colorComponentToByte(value, normalized = false) {
+            const scaled = value <= 1 ? value * 255 : value;
+            return clamp(Math.round(finiteNumber(scaled, 255)), 0, 255);
+        }
+
+        function pointColorBytes(node, index, fallbackColor) {
+            const colorAttr = node.geometry.attributes.color;
+            if (!colorAttr) {
+                return [
+                    colorComponentToByte(fallbackColor.r, true),
+                    colorComponentToByte(fallbackColor.g, true),
+                    colorComponentToByte(fallbackColor.b, true)
+                ];
+            }
+            return [
+                colorComponentToByte(colorAttr.getX(index), colorAttr.normalized),
+                colorComponentToByte(colorAttr.getY(index), colorAttr.normalized),
+                colorComponentToByte(colorAttr.getZ(index), colorAttr.normalized)
+            ];
+        }
+
+        function formatPlyNumber(value) {
+            return Number.isFinite(value) ? Number(value).toPrecision(8) : '0';
+        }
+
+        function countPlyExportPoints(nodes, useCrop) {
+            if (useCrop) updateCropPlanes();
+            const worldPoint = new THREE.Vector3();
+            let count = 0;
+            nodes.forEach((node) => {
+                const position = node.geometry.attributes.position;
+                node.updateMatrixWorld(true);
+                for (let i = 0; i < position.count; i++) {
+                    worldPoint.fromBufferAttribute(position, i).applyMatrix4(node.matrixWorld);
+                    if (!useCrop || isPointInsideCropVolume(worldPoint)) count++;
+                }
+            });
+            return count;
+        }
+
+        function buildPlyExportBlob(nodes, vertexCount, useCrop) {
+            const chunks = [
+                'ply\n',
+                'format ascii 1.0\n',
+                `element vertex ${vertexCount}\n`,
+                'property float x\n',
+                'property float y\n',
+                'property float z\n',
+                'property uchar red\n',
+                'property uchar green\n',
+                'property uchar blue\n',
+                'end_header\n'
+            ];
+            const worldPoint = new THREE.Vector3();
+            let lineBuffer = [];
+
+            nodes.forEach((node) => {
+                const position = node.geometry.attributes.position;
+                const fallbackColor = materialDiffuseColor(node.material);
+                node.updateMatrixWorld(true);
+
+                for (let i = 0; i < position.count; i++) {
+                    worldPoint.fromBufferAttribute(position, i).applyMatrix4(node.matrixWorld);
+                    if (useCrop && !isPointInsideCropVolume(worldPoint)) continue;
+
+                    const color = pointColorBytes(node, i, fallbackColor);
+                    lineBuffer.push(`${formatPlyNumber(worldPoint.x)} ${formatPlyNumber(worldPoint.y)} ${formatPlyNumber(worldPoint.z)} ${color[0]} ${color[1]} ${color[2]}\n`);
+                    if (lineBuffer.length >= 50000) {
+                        chunks.push(lineBuffer.join(''));
+                        lineBuffer = [];
+                    }
+                }
+            });
+
+            if (lineBuffer.length) chunks.push(lineBuffer.join(''));
+            return new Blob(chunks, { type: 'application/octet-stream' });
+        }
+
+        function exportCurrentPointCloudPly() {
+            const nodes = getPointExportNodes();
+            if (!nodes.length) {
+                alert("No point cloud data is available to export.");
+                return;
+            }
+
+            const useCrop = cropEnabled && cropBox;
+            const vertexCount = countPlyExportPoints(nodes, useCrop);
+            if (vertexCount <= 0) {
+                alert("The crop cuboid does not contain any points to export.");
+                return;
+            }
+
+            if (vertexCount > 1000000) {
+                const ok = confirm(`This PLY will export ${vertexCount.toLocaleString()} points and may take a moment. Continue?`);
+                if (!ok) return;
+            }
+
+            const blob = buildPlyExportBlob(nodes, vertexCount, useCrop);
+            const suffix = useCrop ? 'cropped_rotated' : 'rotated';
+            downloadBlob(blob, `point_cloud_${suffix}_${vertexCount}.ply`);
         }
 
         function yieldToBrowser() {
@@ -833,6 +1450,7 @@
             frameHelper = new THREE.LineSegments(frameGeo, frameMat);
             frameHelper.visible = false; 
             scene.add(frameHelper);
+            createCropBoxHelper();
 
             // 11. Materials
             const stencilConfig = {
@@ -1058,7 +1676,7 @@
                 `,
                 clipping: true,
                 transparent: false,
-                clippingPlanes: showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom]
+                clippingPlanes: getPointClippingPlanes(!showFullPointCloud)
             });
         };
 
@@ -1193,7 +1811,7 @@
                     }
                 `,
                 clipping: true,
-                clippingPlanes: showFullPointCloud ? [] : [slabPlaneTop, slabPlaneBottom],
+                clippingPlanes: getPointClippingPlanes(!showFullPointCloud),
                 transparent: true,
                 depthTest: true,
                 depthWrite: false,
@@ -1785,6 +2403,11 @@
             if (!position) return 0;
 
             const count = position.count;
+            if (count <= 0) {
+                geometry.userData.previewCount = 0;
+                geometry.setDrawRange(0, 0);
+                return 0;
+            }
             if (!geometry.userData.previewIndexReady && count > 1 && canUsePreviewIndex(count)) {
                 geometry.setIndex(createPreviewIndexAttribute(count));
                 geometry.userData.previewIndexReady = true;
@@ -1933,7 +2556,8 @@
         }
 
         function setGaussianRendererDrawCount(mesh, count) {
-            const clamped = Math.max(1, Math.min(mesh.userData.maxCount, count));
+            const maxCount = Math.max(0, mesh.userData.maxCount || 0);
+            const clamped = maxCount <= 0 ? 0 : Math.max(1, Math.min(maxCount, count));
             mesh.userData.drawCount = clamped;
             mesh.userData.needsSort = true;
             mesh.geometry.instanceCount = clamped;
@@ -2116,6 +2740,7 @@
 
         function finishModelLoad(status, statusText, spinner) {
             updateBounds();
+            fitCropBoxToModel();
             controls.target.set(0, 0, 0);
             controls.update();
 
@@ -2133,6 +2758,7 @@
             resetOrientationUI();
             refreshSliceThicknessFromMode();
             updateFrameHelper();
+            updateCropHelperVisibility();
             updatePointDensity();
         }
 
@@ -2396,6 +3022,7 @@
                 pointMaterials = [];
                 gaussianMaterials = [];
                 activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
+                cropBoxInitialized = false;
 
                 const imported = normalizeImportedAsset(asset, extension, getImportMode());
                 if (imported.preferGaussian && getImportMode() !== 'points') {
@@ -2413,17 +3040,17 @@
         function setPointDrawFraction(fraction) {
             pointDrawFraction = clamp(finiteNumber(fraction, DEFAULT_POINT_DENSITY), 0.01, 1.0);
             pointGroup.traverse(o => {
-                if(o.isPoints && o.userData.maxCount) {
-                    const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
+                if(o.isPoints && typeof o.userData.maxCount === 'number') {
+                    const count = o.userData.maxCount <= 0 ? 0 : Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
                     o.geometry.setDrawRange(0, count);
                 }
             });
             gaussianGroup.traverse(o => {
-                if (o.userData.isGaussianSplatRenderer && o.userData.maxCount) {
-                    const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
+                if (o.userData.isGaussianSplatRenderer && typeof o.userData.maxCount === 'number') {
+                    const count = o.userData.maxCount <= 0 ? 0 : Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
                     setGaussianRendererDrawCount(o, count);
-                } else if(o.isPoints && o.userData.maxCount) {
-                    const count = Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
+                } else if(o.isPoints && typeof o.userData.maxCount === 'number') {
+                    const count = o.userData.maxCount <= 0 ? 0 : Math.max(1, Math.floor(o.userData.maxCount * pointDrawFraction));
                     o.geometry.setDrawRange(0, count);
                 }
             });
@@ -2436,7 +3063,7 @@
         }
 
         function applyPointClippingPlanes(useSlab) {
-            const planes = useSlab ? [slabPlaneTop, slabPlaneBottom] : [];
+            const planes = getPointClippingPlanes(useSlab);
             pointMaterials.forEach((material) => {
                 material.clippingPlanes = planes;
                 material.needsUpdate = true;
@@ -2452,11 +3079,19 @@
             applyPointClippingPlanes(!showFullPointCloud);
             updatePlaneHeight(document.getElementById('slice-slider').value);
         }
+
+        function getBoundsWrapper() {
+            if (renderStyle === 'gaussian' && activeWrappers.gaussian) return activeWrappers.gaussian;
+            if (renderStyle === 'points' && activeWrappers.points) return activeWrappers.points;
+            return activeWrappers.visual || activeWrappers.points || activeWrappers.gaussian;
+        }
         
         function updateBounds() {
-            if (!activeWrappers.visual) return;
-            activeWrappers.visual.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(activeWrappers.visual);
+            const boundsWrapper = getBoundsWrapper();
+            if (!boundsWrapper) return;
+            boundsWrapper.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(boundsWrapper);
+            if (box.isEmpty()) return;
             const min = getAxisComponent(box.min);
             const max = getAxisComponent(box.max);
             const height = max - min;
@@ -2479,6 +3114,12 @@
             });
             
             updateBounds();
+            if (!cropEnabled) fitCropBoxToModel();
+            else {
+                updateCropPlanes();
+                syncCropControlsFromBox();
+            }
+            updateCropHelperVisibility();
             if (!isAnimate) {
                 refreshSliceThicknessFromMode();
             }
@@ -2560,6 +3201,10 @@
 
                 updatePlaneHeight(document.getElementById('slice-slider').value);
             }
+            updateBounds();
+            updatePlaneHeight(document.getElementById('slice-slider').value);
+            if (!cropEnabled) fitCropBoxToModel();
+            updateCropHelperVisibility();
         }
         function updateFrameHelper() {
             if (!frameHelper) return;
@@ -2769,6 +3414,12 @@
             configureCameraForSliceAxis(orthoCamera);
 
             frameHelper.visible = false;
+            updateCropPlanes();
+            if (cropBox) cropBox.visible = false;
+            if (cropTransformControls) {
+                cropTransformControls.visible = false;
+                cropTransformControls.enabled = false;
+            }
             if (settings.renderStyle === 'mesh') {
                 visualGroup.visible = false;
                 pointGroup.visible = false;
@@ -2962,6 +3613,7 @@
                 setPointDrawFraction(previousPointDrawFraction);
                 refreshSliceThicknessFromMode();
                 setFullPointCloudVisible(showFullPointCloud);
+                updateCropHelperVisibility();
             }
         }
 
@@ -3103,6 +3755,7 @@
             } else {
                 document.getElementById('show-mesh').checked = visualGroup.visible;
             }
+            updateCropHelperVisibility();
         }
 
         function updatePlaneHeight(val) {
@@ -3179,10 +3832,13 @@
             
             // Point UI
             document.getElementById('point-size').addEventListener('input', (e) => {
-                pointSize = clamp(finiteNumber(e.target.value, pointSize), POINT_SIZE_MIN, POINT_SIZE_MAX);
-                document.getElementById('point-size-val').textContent = pointSize.toFixed(2);
-                pointMaterials.forEach(m => m.uniforms.size.value = pointSize);
-                gaussianMaterials.forEach(m => m.uniforms.size.value = pointSize);
+                setPointSize(logSliderToValue(e.target.value, POINT_SIZE_MIN, POINT_SIZE_MAX), 'slider');
+            });
+            document.getElementById('point-size-val').addEventListener('input', (e) => {
+                setPointSize(e.target.value, 'input');
+            });
+            document.getElementById('point-size-val').addEventListener('change', () => {
+                setPointSize(pointSize);
             });
             document.getElementById('point-count').addEventListener('input', (e) => {
                 updatePointDensity();
@@ -3199,12 +3855,33 @@
             document.getElementById('show-full-cloud').addEventListener('change', (e) => {
                 setFullPointCloudVisible(e.target.checked);
             });
+            document.getElementById('crop-enabled').addEventListener('change', (e) => {
+                setCropEnabled(e.target.checked);
+            });
+            ['move', 'scale', 'rotate'].forEach((mode) => {
+                document.getElementById(`crop-mode-${mode}`).addEventListener('click', () => setCropControlsMode(mode));
+            });
+            ['pos-x', 'pos-y', 'pos-z', 'size-x', 'size-y', 'size-z', 'rot-x', 'rot-y', 'rot-z'].forEach((id) => {
+                document.getElementById(`crop-${id}`).addEventListener('input', applyCropControlsToBox);
+            });
+            document.getElementById('crop-fit').addEventListener('click', () => {
+                fitCropBoxToModel();
+                if (cropEnabled) applyPointClippingPlanes(!showFullPointCloud);
+                updateCropHelperVisibility();
+            });
+            document.getElementById('crop-apply').addEventListener('click', applyCropToPointData);
+            document.getElementById('crop-export-ply').addEventListener('click', exportCurrentPointCloudPly);
 
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
-                captureScale = clamp(finiteNumber(e.target.value, captureScale), 0.2, 2.0);
-                document.getElementById('zoom-val').textContent = captureScale.toFixed(1) + 'x';
+                setCaptureScale(logSliderToValue(e.target.value, FRAME_SCALE_MIN, FRAME_SCALE_MAX), 'slider');
                 document.getElementById('show-frame').checked = true;
-                updateFrameHelper();
+            });
+            document.getElementById('zoom-val').addEventListener('input', (e) => {
+                setCaptureScale(e.target.value, 'input');
+                document.getElementById('show-frame').checked = true;
+            });
+            document.getElementById('zoom-val').addEventListener('change', () => {
+                setCaptureScale(captureScale);
             });
             document.getElementById('show-frame').addEventListener('change', updateFrameHelper);
             document.getElementById('export-w').addEventListener('input', updateFrameHelper);
@@ -3220,6 +3897,11 @@
             });
             updateExportButtonLabel();
             updateSliceAxisUI();
+            setPointSize(pointSize);
+            setCaptureScale(captureScale);
+            setCropControlsMode(cropControlsMode);
+            syncCropControlsFromBox();
+            setCropEnabled(cropEnabled);
             refreshSliceThicknessFromMode();
         }
 
@@ -3276,6 +3958,7 @@
                     visualGroup.visible = false; 
                 }
             }
+            updateCropHelperVisibility();
         }
         
         window.toggle3DProjection = function(isOrtho) {
@@ -3311,6 +3994,7 @@
             
             controls.object = activeCamera;
             controls.update();
+            updateCropHelperVisibility();
         }
 
         window.setCapColor = function(hexStr) {
