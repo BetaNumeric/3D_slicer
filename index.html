@@ -138,8 +138,32 @@
                                 <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                                 <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
                             </div>
-                            <button onclick="resetOrientation()" class="w-full text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 mt-1 transition-colors">Reset Rotation</button>
                         </div>
+
+                        <!-- Translation -->
+                        <div class="space-y-2 pt-3 border-t border-gray-800">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold block">Model Position</label>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-red-500 w-3">X</span>
+                                <input type="range" id="pos-model-x" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
+                                <input type="number" id="num-pos-model-x" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
+                                <input type="range" id="pos-model-y" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                                <input type="number" id="num-pos-model-y" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
+                                <input type="range" id="pos-model-z" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                                <input type="number" id="num-pos-model-z" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
+                            </div>
+                            <div class="flex gap-2 min-w-0 w-full mt-1">
+                                <button onclick="centerModel()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Center</button>
+                                <button onclick="resetOrientationUI(); ['x','y','z'].forEach(a => { const el = document.getElementById(`pos-model-${a}`); if(el) el.value=0; const nel = document.getElementById(`num-pos-model-${a}`); if (nel) nel.value=0; }); updateOrientation();" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Reset</button>
+                            </div>
+                        </div>
+
                         <div class="space-y-3 pt-3 border-t border-gray-800">
                             <label class="text-[10px] text-gray-500 uppercase font-bold block">Crop Cuboid</label>
                             <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
@@ -1128,19 +1152,60 @@
             return clamp(Math.round(finiteNumber(scaled, 255)), 0, 255);
         }
 
+        function getTextureImageData(texture) {
+            if (!texture || !texture.image) return null;
+            if (texture.userData && texture.userData.imageData) return texture.userData.imageData;
+            const img = texture.image;
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                const data = ctx.getImageData(0, 0, img.width, img.height);
+                texture.userData = texture.userData || {};
+                texture.userData.imageData = data;
+                return data;
+            } catch (e) {
+                return null;
+            }
+        }
+
         function pointColorBytes(node, index, fallbackColor) {
             const colorAttr = node.geometry.attributes.color;
-            if (!colorAttr) {
-                return [
-                    colorComponentToByte(fallbackColor.r, true),
-                    colorComponentToByte(fallbackColor.g, true),
-                    colorComponentToByte(fallbackColor.b, true)
-                ];
+            const uvAttr = node.geometry.attributes.uv;
+            let r = fallbackColor.r !== undefined ? fallbackColor.r : 1;
+            let g = fallbackColor.g !== undefined ? fallbackColor.g : 1;
+            let b = fallbackColor.b !== undefined ? fallbackColor.b : 1;
+
+            if (colorAttr) {
+                r *= colorAttr.getX(index);
+                g *= colorAttr.getY(index);
+                b *= colorAttr.getZ(index);
             }
+
+            const map = node.material?.uniforms?.map?.value;
+            if (map && uvAttr) {
+                const imgData = getTextureImageData(map);
+                if (imgData) {
+                    let u = uvAttr.getX(index);
+                    let v = uvAttr.getY(index);
+                    u = u - Math.floor(u);
+                    v = v - Math.floor(v);
+                    if (map.flipY !== false) v = 1.0 - v;
+                    const x = Math.min(imgData.width - 1, Math.max(0, Math.floor(u * imgData.width)));
+                    const y = Math.min(imgData.height - 1, Math.max(0, Math.floor(v * imgData.height)));
+                    const idx = (y * imgData.width + x) * 4;
+                    r *= imgData.data[idx] / 255;
+                    g *= imgData.data[idx + 1] / 255;
+                    b *= imgData.data[idx + 2] / 255;
+                }
+            }
+
             return [
-                colorComponentToByte(colorAttr.getX(index), colorAttr.normalized),
-                colorComponentToByte(colorAttr.getY(index), colorAttr.normalized),
-                colorComponentToByte(colorAttr.getZ(index), colorAttr.normalized)
+                colorComponentToByte(r, true),
+                colorComponentToByte(g, true),
+                colorComponentToByte(b, true)
             ];
         }
 
@@ -2718,6 +2783,13 @@
             return new THREE.Euler(rx, ry, rz, 'XYZ');
         }
 
+        function getModelTranslation() {
+            const px = finiteNumber(document.getElementById('pos-model-x')?.value, 0);
+            const py = finiteNumber(document.getElementById('pos-model-y')?.value, 0);
+            const pz = finiteNumber(document.getElementById('pos-model-z')?.value, 0);
+            return new THREE.Vector3(px, py, pz);
+        }
+
         function forEachActiveWrapper(callback) {
             const seen = new Set();
             Object.values(activeWrappers).forEach((wrapper) => {
@@ -2727,15 +2799,20 @@
             });
         }
 
-        function applyWrapperTransform(wrapper, euler) {
+        function applyWrapperTransform(wrapper, euler, translation = null) {
             const baseScale = wrapper.userData.baseScale || Math.abs(wrapper.scale.x) || 1;
             wrapper.rotation.copy(euler);
             wrapper.scale.set(baseScale, flipModelVertical ? -baseScale : baseScale, baseScale);
+            if (translation) {
+                // Apply translation, considering we can shift it before or after scaling
+                // multiplyScalar makes it act in "normalized model" magnitude
+                wrapper.position.copy(translation).multiplyScalar(baseScale);
+            }
         }
 
         function setWrapperBaseScale(wrapper, scale) {
             wrapper.userData.baseScale = scale;
-            applyWrapperTransform(wrapper, new THREE.Euler());
+            applyWrapperTransform(wrapper, new THREE.Euler(), new THREE.Vector3());
         }
 
         function finishModelLoad(status, statusText, spinner) {
@@ -3108,7 +3185,8 @@
             if (!activeWrappers.visual) return;
             flipModelVertical = document.getElementById('flip-model').checked;
             const euler = getOrientationEuler();
-            forEachActiveWrapper((wrapper) => applyWrapperTransform(wrapper, euler));
+            const translation = getModelTranslation();
+            forEachActiveWrapper((wrapper) => applyWrapperTransform(wrapper, euler, translation));
             gaussianGroup.traverse((node) => {
                 if (node.userData.isGaussianSplatRenderer) node.userData.needsSort = true;
             });
@@ -3135,6 +3213,40 @@
                 document.getElementById(`rot-${axis}`).value = 0;
                 document.getElementById(`num-rot-${axis}`).value = 0;
             });
+            document.getElementById('flip-model').checked = false;
+        }
+
+        window.centerModel = function() {
+            if (!activeWrappers.visual) return;
+            
+            // Set offset to zero momentarily to measure natural center
+            ['x', 'y', 'z'].forEach(axis => {
+                const el = document.getElementById(`pos-model-${axis}`);
+                if (el) el.value = 0;
+            });
+            updateOrientation();
+
+            const box = new THREE.Box3().setFromObject(getBoundsWrapper());
+            if (box.isEmpty()) return;
+            
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            
+            const baseScale = activeWrappers.visual.userData.baseScale || 1;
+            const tx = -center.x / baseScale;
+            const ty = -center.y / baseScale;
+            const tz = -center.z / baseScale;
+
+            ['x', 'y', 'z'].forEach(axis => {
+                const val = axis === 'x' ? tx : (axis === 'y' ? ty : tz);
+                const fixed = val.toFixed(2);
+                const slider = document.getElementById(`pos-model-${axis}`);
+                if (slider) slider.value = fixed;
+                const num = document.getElementById(`num-pos-model-${axis}`);
+                if (num) num.value = fixed;
+            });
+            
+            updateOrientation();
         }
         
         window.toggleMesh = function(visible) {
@@ -3813,14 +3925,24 @@
             });
             
             ['x', 'y', 'z'].forEach(axis => {
-                const slider = document.getElementById(`rot-${axis}`);
-                const number = document.getElementById(`num-rot-${axis}`);
-                slider.addEventListener('input', () => { number.value = slider.value; updateOrientation(); });
-                number.addEventListener('input', () => {
-                    const val = clamp(finiteNumber(number.value, 0), 0, 360);
-                    number.value = val;
-                    slider.value = val; updateOrientation();
+                const rotSlider = document.getElementById(`rot-${axis}`);
+                const rotNumber = document.getElementById(`num-rot-${axis}`);
+                rotSlider.addEventListener('input', () => { rotNumber.value = rotSlider.value; updateOrientation(); });
+                rotNumber.addEventListener('input', () => {
+                    const val = clamp(finiteNumber(rotNumber.value, 0), 0, 360);
+                    rotNumber.value = val;
+                    rotSlider.value = val; updateOrientation();
                 });
+
+                const posSlider = document.getElementById(`pos-model-${axis}`);
+                const posNumber = document.getElementById(`num-pos-model-${axis}`);
+                if (posSlider && posNumber) {
+                    posSlider.addEventListener('input', () => { posNumber.value = posSlider.value; updateOrientation(); });
+                    posNumber.addEventListener('input', () => {
+                        const val = finiteNumber(posNumber.value, 0);
+                        posSlider.value = val; updateOrientation();
+                    });
+                }
             });
             
             document.getElementById('outline-mode').addEventListener('change', (e) => toggleOutlineMode(e.target.checked));
