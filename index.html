@@ -60,10 +60,8 @@
                 </button>
             </div>
 
-            <!-- Content -->
-            <div id="panel-content" class="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
-                
-                <!-- View Mode -->
+            <!-- Always-visible view controls -->
+            <div id="persistent-controls" class="p-3 space-y-3 bg-black/30 border-b border-gray-800">
                 <div class="bg-black/40 p-1 rounded-lg border border-gray-800">
                     <div class="flex shadow-inner mb-2">
                         <button id="btn-3d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md">3D View</button>
@@ -79,8 +77,13 @@
                     </div>
                 </div>
 
+                <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-2">
+                    <span>Show Full Point Cloud</span>
+                    <input type="checkbox" id="show-full-cloud" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                </label>
+
                 <!-- Slice Control -->
-                <div class="space-y-2">
+                <div id="slice-control" class="space-y-2">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-2">
                             <label id="slice-label" class="text-xs font-bold uppercase text-gray-500">Slice Position (Y)</label>
@@ -94,6 +97,10 @@
                     </div>
                     <input type="range" id="slice-slider" min="-1" max="1" step="0.01" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400">
                 </div>
+            </div>
+
+            <!-- Content -->
+            <div id="panel-content" class="p-5 space-y-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
 
                 <!-- Automation -->
                 <div class="bg-black/20 rounded-lg p-3 border border-gray-800 space-y-3">
@@ -225,13 +232,13 @@
                     <div class="grid grid-cols-2 gap-2">
                         <div>
                             <label class="text-[10px] text-gray-500 uppercase font-bold">Duration (s)</label>
-                            <input type="number" id="export-duration" value="5" min="1" max="60" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            <input type="number" id="export-duration" value="22" min="1" max="60" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                         </div>
                         <div>
                             <label class="text-[10px] text-gray-500 uppercase font-bold">FPS</label>
                             <select id="export-fps" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
-                                <option value="30">30</option>
-                                <option value="60" selected>60</option>
+                                <option value="30" selected>30</option>
+                                <option value="60">60</option>
                             </select>
                         </div>
                     </div>
@@ -239,8 +246,8 @@
                     <div>
                         <label class="text-[10px] text-gray-500 uppercase font-bold">Format</label>
                         <select id="export-format" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
-                            <option value="mp4" selected>MP4 Video</option>
-                            <option value="png-sequence">PNG Frame Sequence (.zip)</option>
+                            <option value="mp4">MP4 Video</option>
+                            <option value="png-sequence" selected>PNG Frame Sequence (.zip)</option>
                         </select>
                     </div>
 
@@ -257,7 +264,7 @@
                     <div>
                         <label class="text-[10px] text-gray-500 uppercase font-bold">Resolution (px)</label>
                         <div class="flex gap-2">
-                             <input type="number" id="export-w" value="1080" placeholder="W" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                             <input type="number" id="export-w" value="1920" placeholder="W" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                              <span class="text-gray-500 self-center">x</span>
                              <input type="number" id="export-h" value="1080" placeholder="H" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                         </div>
@@ -273,30 +280,45 @@
                         
                          <label class="flex items-center gap-2 cursor-pointer mt-1">
                             <input type="checkbox" id="show-frame" class="w-3 h-3 accent-red-500 rounded bg-gray-700 border-gray-600">
-                            <span class="text-[10px] text-gray-400 uppercase font-bold select-none">Show Capture Frame</span>
+                            <span class="text-[10px] text-gray-400 uppercase font-bold select-none">Show Display Frame & Travel</span>
                         </label>
                     </div>
 
-                    <!-- Display Calibration -->
+                    <!-- Moving Display -->
                     <div class="space-y-2 pt-1 border-t border-gray-700">
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Display Calibration</label>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Moving Display</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Width (mm)</label>
+                                <input type="number" id="display-width-mm" value="536" min="1" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Height (mm)</label>
+                                <input type="number" id="display-height-mm" value="301.5" min="1" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            </div>
+                        </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Travel (mm)</label>
-                                <input type="number" id="calibration-travel-mm" value="100" min="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                                <input type="number" id="display-travel-mm" value="480" min="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                             </div>
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Blank Frames</label>
-                                <input type="number" id="calibration-blank-frames" value="0" min="0" step="1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Vertical Fit</label>
+                                <select id="display-placement" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
+                                    <option value="center" selected>Center</option>
+                                    <option value="bottom">Bottom</option>
+                                </select>
                             </div>
                         </div>
-                        <div>
-                            <label class="text-[10px] text-gray-500 uppercase font-bold">Motion Profile</label>
-                            <select id="calibration-motion-profile" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
-                                <option value="forward" selected>Linear Forward</option>
-                                <option value="reverse">Linear Reverse</option>
-                                <option value="pingpong">Linear Ping-Pong</option>
-                            </select>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Volume (cm)</label>
+                                <input type="number" id="sequence-volume-height-cm" value="0" readonly class="w-full bg-gray-900/60 text-blue-300 text-xs p-1 rounded border border-gray-700 outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Start (cm)</label>
+                                <input type="number" id="sequence-start-cm" value="0" readonly class="w-full bg-gray-900/60 text-blue-300 text-xs p-1 rounded border border-gray-700 outline-none">
+                            </div>
                         </div>
                     </div>
 
@@ -372,12 +394,6 @@
                             </select>
                             <input type="range" id="point-thick" min="0.00005" max="0.2" step="0.00005" value="0.010" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                          </div>
-                         <div class="pt-1 border-t border-gray-800">
-                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                                <span>Show Full Point Cloud</span>
-                                <input type="checkbox" id="show-full-cloud" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
-                            </label>
-                         </div>
                       </div>
                 </div>
 
@@ -431,20 +447,23 @@
         // --- CONSTANTS ---
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
         const FRUSTUM_SIZE = 3.0;
-        const MAX_POINTS = 5000000;
+        const MAX_POINTS = 12000000;
         const DEFAULT_POINT_SIZE = 0.01;
         const POINT_SIZE_MIN = 0.001;
         const POINT_SIZE_MAX = 1.0;
         const GAUSSIAN_REFERENCE_RADIUS = 0.012;
         const GAUSSIAN_MIN_RADIUS = 0.0015;
         const GAUSSIAN_MAX_RADIUS = 0.06;
-        const DEFAULT_POINT_DENSITY = 0.1;
+        const DEFAULT_POINT_DENSITY = 0.10;
         const EXPORT_POINT_DENSITY = 1.0;
         const DEFAULT_SLICE_THICKNESS = 0.010;
         const SLICE_THICKNESS_MIN = 0.00005;
         const SLICE_THICKNESS_MAX = 0.2;
         const FRAME_SCALE_MIN = 0.001;
         const FRAME_SCALE_MAX = 2.0;
+        const DISPLAY_WIDTH_MM = 536;
+        const DISPLAY_HEIGHT_MM = 301.5;
+        const DISPLAY_TRAVEL_MM = 480;
         const CROP_MIN_SIZE = 0.01;
         const CROP_FIT_PADDING = 1.02;
         const EXPORT_LARGE_WARNING_BYTES = 1.5 * 1024 * 1024 * 1024;
@@ -487,7 +506,7 @@
         const slabPlaneBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
         let capMesh;
-        let frameHelper; 
+        let frameHelper, displayVolumeHelper; 
         let cropBox, cropBoxFill, cropBoxEdges, cropTransformControls;
         let isAnimate = false;
         let scanSpeed = 0.5;
@@ -594,6 +613,7 @@
             slabPlaneTop.normal.copy(axis.negative);
             if (capMesh) capMesh.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.negative);
             if (frameHelper) frameHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
+            if (displayVolumeHelper) displayVolumeHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
         }
 
         function updateSliceAxisUI() {
@@ -664,11 +684,76 @@
             if (slider && source !== 'slider') slider.value = valueToLogSlider(captureScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX).toFixed(3);
             if (input && source !== 'input') input.value = captureScale.toFixed(3);
             updateFrameHelper();
+            syncSequencePreview();
+        }
+
+        function roundCm(value) {
+            return Number(Math.max(0, finiteNumber(value, 0)).toFixed(2));
+        }
+
+        function getMovingDisplayInputs(width = null, height = null) {
+            const exportWidth = Math.max(2, width || evenPositiveInteger(document.getElementById('export-w')?.value, 1920));
+            const exportHeight = Math.max(2, height || evenPositiveInteger(document.getElementById('export-h')?.value, 1080));
+            return {
+                widthMm: Math.max(1, finiteNumber(document.getElementById('display-width-mm')?.value, DISPLAY_WIDTH_MM)),
+                heightMm: Math.max(1, finiteNumber(document.getElementById('display-height-mm')?.value, DISPLAY_HEIGHT_MM)),
+                travelMm: Math.max(0, finiteNumber(document.getElementById('display-travel-mm')?.value, DISPLAY_TRAVEL_MM)),
+                placement: document.getElementById('display-placement')?.value === 'bottom' ? 'bottom' : 'center',
+                exportWidth,
+                exportHeight
+            };
+        }
+
+        function getSequenceInstructions(display = getMovingDisplayInputs()) {
+            const aspect = display.exportWidth / display.exportHeight;
+            const frameHeightUnits = FRUSTUM_SIZE * captureScale;
+            const frameWidthUnits = frameHeightUnits * aspect;
+            const displayWidthCm = display.widthMm / 10;
+            const displayHeightCm = display.heightMm / 10;
+            const travelCm = display.travelMm / 10;
+            const cmPerModelUnit = Math.min(displayWidthCm / frameWidthUnits, displayHeightCm / frameHeightUnits);
+            const volumeHeightCm = roundCm(Math.max(0, modelBounds.max - modelBounds.min) * cmPerModelUnit);
+            const centeredStart = (travelCm - volumeHeightCm) / 2;
+            const startCm = roundCm(display.placement === 'bottom' ? 0 : centeredStart);
+
+            return {
+                volume_height_cm: volumeHeightCm,
+                start_cm: startCm,
+                cm_per_model_unit: cmPerModelUnit,
+                travel_cm: travelCm
+            };
+        }
+
+        function syncSequencePreview() {
+            const volumeEl = document.getElementById('sequence-volume-height-cm');
+            const startEl = document.getElementById('sequence-start-cm');
+            if (!volumeEl || !startEl) return;
+            const sequence = getSequenceInstructions();
+            volumeEl.value = sequence.volume_height_cm;
+            startEl.value = sequence.start_cm;
+            updateFrameHelper();
+        }
+
+        function getDisplayVolumeMetrics(display = getMovingDisplayInputs()) {
+            const sequence = getSequenceInstructions(display);
+            const cmPerModelUnit = Math.max(0.000001, sequence.cm_per_model_unit);
+            const displayWidthUnits = (display.widthMm / 10) / cmPerModelUnit;
+            const displayHeightUnits = (display.heightMm / 10) / cmPerModelUnit;
+            const travelUnits = sequence.travel_cm / cmPerModelUnit;
+            const startUnits = sequence.start_cm / cmPerModelUnit;
+            const minDepth = modelBounds.min - startUnits;
+
+            return {
+                displayWidthUnits,
+                displayHeightUnits,
+                travelUnits,
+                centerDepth: minDepth + travelUnits / 2
+            };
         }
 
         function getActiveExportFrameCount(settings) {
             const totalFrames = getTotalExportFrames(settings);
-            return Math.max(1, totalFrames - settings.blankFrames * 2);
+            return Math.max(1, totalFrames);
         }
 
         function getPitchMatchedSliceThickness(settings) {
@@ -676,8 +761,7 @@
             const activeFrames = getActiveExportFrameCount(settings);
             if (span <= 0) return SLICE_THICKNESS_MIN;
             if (activeFrames <= 1) return Math.max(SLICE_THICKNESS_MIN, span);
-            const pathMultiplier = settings.motionProfile === 'pingpong' ? 2 : 1;
-            return Math.max(SLICE_THICKNESS_MIN, (span * pathMultiplier) / (activeFrames - 1));
+            return Math.max(SLICE_THICKNESS_MIN, span / (activeFrames - 1));
         }
 
         function resolveSliceThicknessForSettings(settings) {
@@ -1515,6 +1599,17 @@
             frameHelper = new THREE.LineSegments(frameGeo, frameMat);
             frameHelper.visible = false; 
             scene.add(frameHelper);
+            const volumeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+            const volumeMat = new THREE.LineBasicMaterial({
+                color: 0xff4444,
+                transparent: true,
+                opacity: 0.45,
+                depthTest: false,
+                depthWrite: false
+            });
+            displayVolumeHelper = new THREE.LineSegments(volumeGeo, volumeMat);
+            displayVolumeHelper.visible = false;
+            scene.add(displayVolumeHelper);
             createCropBoxHelper();
 
             // 11. Materials
@@ -1626,6 +1721,7 @@
             stencilGroup.visible = true; 
             capGroup.visible = true;     
             frameHelper.visible = false; 
+            if (displayVolumeHelper) displayVolumeHelper.visible = false;
             pointGroup.visible = false; 
             gaussianGroup.visible = false;
 
@@ -1639,6 +1735,7 @@
             stencilGroup.visible = false; 
             capGroup.visible = false;     
             frameHelper.visible = document.getElementById('show-frame').checked && !isProcessingVideo;
+            if (displayVolumeHelper) displayVolumeHelper.visible = document.getElementById('show-frame').checked && !isProcessingVideo;
 
             renderer.clear();
             if(visVisible) {
@@ -1652,7 +1749,7 @@
             renderer.render(postScene, postCamera);
             renderer.autoClear = true;
             
-            if(frameHelper.visible) {
+            if(frameHelper.visible || displayVolumeHelper?.visible) {
                 if(!visVisible) {
                     visualGroup.visible = false;
                     stencilGroup.visible = false;
@@ -3153,8 +3250,18 @@
 
         function setFullPointCloudVisible(visible) {
             showFullPointCloud = visible;
+            const checkbox = document.getElementById('show-full-cloud');
+            if (checkbox) checkbox.checked = showFullPointCloud;
             applyPointClippingPlanes(!showFullPointCloud);
             updatePlaneHeight(document.getElementById('slice-slider').value);
+            updateSliceControlVisibility();
+        }
+
+        function updateSliceControlVisibility() {
+            const sliceControl = document.getElementById('slice-control');
+            const meshCheckbox = document.getElementById('show-mesh');
+            const fullMeshVisible = renderStyle === 'mesh' && !!meshCheckbox?.checked;
+            if (sliceControl) sliceControl.classList.toggle('hidden', showFullPointCloud || fullMeshVisible);
         }
 
         function getBoundsWrapper() {
@@ -3172,13 +3279,13 @@
             const min = getAxisComponent(box.min);
             const max = getAxisComponent(box.max);
             const height = max - min;
-            const buffer = height * 0.1;
-            modelBounds.min = min - buffer;
-            modelBounds.max = max + buffer;
+            modelBounds.min = min;
+            modelBounds.max = max;
             const slider = document.getElementById('slice-slider');
             slider.min = modelBounds.min;
             slider.max = modelBounds.max;
-            slider.step = height / 1000;
+            slider.step = Math.max(height / 1000, 0.00001);
+            syncSequencePreview();
         }
 
         function updateOrientation() {
@@ -3251,6 +3358,7 @@
         
         window.toggleMesh = function(visible) {
             if (visualGroup) visualGroup.visible = visible;
+            updateSliceControlVisibility();
         }
         
         window.toggleOutlineMode = function(isOutline) {
@@ -3317,17 +3425,26 @@
             updatePlaneHeight(document.getElementById('slice-slider').value);
             if (!cropEnabled) fitCropBoxToModel();
             updateCropHelperVisibility();
+            updateSliceControlVisibility();
         }
         function updateFrameHelper() {
             if (!frameHelper) return;
-            const w = Math.max(2, finiteInteger(document.getElementById('export-w').value, 1080));
-            const h = Math.max(2, finiteInteger(document.getElementById('export-h').value, 1080));
-            const aspect = w / h;
-            const visHeight = FRUSTUM_SIZE * captureScale;
-            const visWidth = visHeight * aspect;
-            frameHelper.scale.set(visWidth, visHeight, 1);
+            const visible = document.getElementById('show-frame').checked && !isProcessingVideo;
+            const metrics = getDisplayVolumeMetrics();
+            frameHelper.scale.set(metrics.displayWidthUnits, metrics.displayHeightUnits, 1);
             setObjectSlicePosition(frameHelper, finiteNumber(document.getElementById('slice-slider').value, 0));
-            frameHelper.visible = document.getElementById('show-frame').checked;
+            frameHelper.visible = visible;
+
+            if (displayVolumeHelper) {
+                displayVolumeHelper.scale.set(
+                    metrics.displayWidthUnits,
+                    metrics.displayHeightUnits,
+                    Math.max(0.000001, metrics.travelUnits)
+                );
+                displayVolumeHelper.position.set(0, 0, 0);
+                setAxisComponent(displayVolumeHelper.position, sliceAxis, metrics.centerDepth);
+                displayVolumeHelper.visible = visible;
+            }
         }
 
         function updateExportButtonLabel() {
@@ -3338,13 +3455,6 @@
 
         function getTotalExportFrames(settings) {
             return Math.max(1, Math.round(settings.fps * settings.duration));
-        }
-
-        function applyMotionProfile(baseProgress, profile) {
-            const t = clamp(baseProgress, 0, 1);
-            if (profile === 'reverse') return 1 - t;
-            if (profile === 'pingpong') return t <= 0.5 ? t * 2 : (1 - t) * 2;
-            return t;
         }
 
         function resolveExportRenderStyle(sliceMode) {
@@ -3371,130 +3481,56 @@
 
         function getExportFrameInfo(index, settings) {
             const totalFrames = getTotalExportFrames(settings);
-            const blankFrames = clamp(settings.blankFrames, 0, Math.max(0, Math.floor((totalFrames - 1) / 2)));
-            const activeFrames = Math.max(1, totalFrames - blankFrames * 2);
-            const blank = index < blankFrames || index >= totalFrames - blankFrames;
             const timeSeconds = index / settings.fps;
-
-            if (blank) {
-                return {
-                    index,
-                    timeSeconds,
-                    blank: true,
-                    sweepProgress: null,
-                    sliceProgress: null,
-                    sliceValueModelUnits: null,
-                    physicalPositionMm: null
-                };
-            }
-
-            const activeIndex = index - blankFrames;
-            const baseProgress = activeFrames === 1 ? 0 : activeIndex / (activeFrames - 1);
-            const profileProgress = applyMotionProfile(baseProgress, settings.motionProfile);
-            const sliceValueModelUnits = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, profileProgress);
+            const progress = totalFrames === 1 ? 0 : index / (totalFrames - 1);
+            const sliceValueModelUnits = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
+            const physicalStartMm = (settings.sequence?.start_cm || 0) * 10;
+            const physicalVolumeMm = (settings.sequence?.volume_height_cm || 0) * 10;
             return {
                 index,
                 timeSeconds,
-                blank: false,
-                sweepProgress: baseProgress,
-                sliceProgress: profileProgress,
+                sweepProgress: progress,
+                sliceProgress: progress,
                 sliceValueModelUnits,
-                physicalPositionMm: settings.physicalTravelMm * profileProgress
+                physicalPositionMm: physicalStartMm + physicalVolumeMm * progress
             };
         }
 
-        function createManifestFrame(frameInfo, fileName = null, settings = null) {
-            const thickness = settings && !frameInfo.blank && settings.renderStyle !== 'mesh'
-                ? settings.sliceThicknessModelUnits
-                : null;
-            return {
-                index: frameInfo.index,
-                file: fileName,
-                timeSeconds: frameInfo.timeSeconds,
-                blank: frameInfo.blank,
-                sweepProgress: frameInfo.sweepProgress,
-                sliceProgress: frameInfo.sliceProgress,
-                sliceValueModelUnits: frameInfo.sliceValueModelUnits,
-                sliceThicknessModelUnits: thickness,
-                sliceMinModelUnits: thickness === null ? null : frameInfo.sliceValueModelUnits - thickness / 2,
-                sliceMaxModelUnits: thickness === null ? null : frameInfo.sliceValueModelUnits + thickness / 2,
-                physicalPositionMm: frameInfo.physicalPositionMm
-            };
-        }
-
-        function buildExportManifest(settings, frames) {
-            const span = modelBounds.max - modelBounds.min;
-            return {
-                schema: '3d-slicer-export-manifest-v1',
-                generatedAt: new Date().toISOString(),
-                app: {
-                    name: '3D Slicer & Exporter',
-                    uiVersion: '6.2'
-                },
-                export: {
-                    format: settings.format,
-                    width: settings.width,
-                    height: settings.height,
-                    fps: settings.fps,
-                    durationSeconds: settings.duration,
-                    totalFrames: getTotalExportFrames(settings),
-                    activeFrames: Math.max(1, getTotalExportFrames(settings) - settings.blankFrames * 2),
-                    blankFramesAtEachEnd: settings.blankFrames,
-                    requestedSliceMode: settings.sliceMode,
-                    resolvedRenderStyle: settings.renderStyle,
-                    estimatedBytes: estimateExportBytes(settings)
-                },
-                slicing: {
-                    axis: getSliceAxisDefinition().label,
-                    modelUnitBounds: { min: modelBounds.min, max: modelBounds.max },
-                    modelUnitSpan: span,
-                    sliceThicknessMode: settings.renderStyle === 'mesh' ? null : settings.sliceThicknessMode,
-                    sliceThicknessModelUnits: settings.renderStyle === 'mesh' ? null : settings.sliceThicknessModelUnits,
-                    framePitchModelUnits: settings.renderStyle === 'mesh' ? null : settings.framePitchModelUnits,
-                    contentType: settings.renderStyle === 'mesh' ? 'filled-mesh-section' : 'surface-slab'
-                },
-                displayCalibration: {
-                    physicalTravelMm: settings.physicalTravelMm,
-                    motionProfile: settings.motionProfile,
-                    mmPerModelUnit: span !== 0 ? settings.physicalTravelMm / span : null
-                },
-                warnings: settings.warnings,
-                frames
-            };
-        }
-
-        function manifestBlob(settings, frames) {
-            return new Blob([JSON.stringify(buildExportManifest(settings, frames), null, 2)], { type: 'application/json' });
+        function sequenceJsonBlob(settings) {
+            return new Blob([JSON.stringify({
+                volume_height_cm: settings.sequence.volume_height_cm,
+                start_cm: settings.sequence.start_cm
+            }, null, 2)], { type: 'application/json' });
         }
 
         function getExportSettings() {
-            const duration = clamp(finiteInteger(document.getElementById('export-duration').value, 5), 1, 60);
-            const fps = clamp(finiteInteger(document.getElementById('export-fps').value, 60), 1, 120);
-            const totalFrames = Math.max(1, Math.round(fps * duration));
-            const maxBlankFrames = Math.max(0, Math.floor((totalFrames - 1) / 2));
+            const duration = clamp(finiteInteger(document.getElementById('export-duration').value, 20), 1, 60);
+            const fps = clamp(finiteInteger(document.getElementById('export-fps').value, 30), 1, 120);
+            const width = evenPositiveInteger(document.getElementById('export-w').value, 1920);
+            const height = evenPositiveInteger(document.getElementById('export-h').value, 1080);
+            const display = getMovingDisplayInputs(width, height);
+            const sequence = getSequenceInstructions(display);
             const resolved = resolveExportRenderStyle(document.getElementById('export-slice-mode').value);
-            const pixelCount = evenPositiveInteger(document.getElementById('export-w').value, 1080) * evenPositiveInteger(document.getElementById('export-h').value, 1080);
+            const pixelCount = width * height;
             const estimatedBitrate = clamp(Math.round(pixelCount * fps * 0.35), 24_000_000, 140_000_000);
             const thicknessMode = document.getElementById('slice-thickness-mode')?.value || sliceThicknessMode;
             const settings = {
                 format: document.getElementById('export-format').value,
-                width: evenPositiveInteger(document.getElementById('export-w').value, 1080),
-                height: evenPositiveInteger(document.getElementById('export-h').value, 1080),
+                width,
+                height,
                 duration,
                 fps,
                 sliceMode: document.getElementById('export-slice-mode').value,
                 renderStyle: resolved.renderStyle,
                 warnings: resolved.warnings,
-                physicalTravelMm: Math.max(0, finiteNumber(document.getElementById('calibration-travel-mm').value, 100)),
-                blankFrames: clamp(finiteInteger(document.getElementById('calibration-blank-frames').value, 0), 0, maxBlankFrames),
-                motionProfile: document.getElementById('calibration-motion-profile').value,
+                sequence,
                 sliceThicknessMode: thicknessMode,
                 estimatedBitrate
             };
             settings.framePitchModelUnits = getPitchMatchedSliceThickness(settings);
             settings.sliceThicknessModelUnits = resolveSliceThicknessForSettings(settings);
-            if (settings.sliceThicknessMode === 'frame-pitch' && settings.motionProfile === 'pingpong') {
-                settings.warnings = settings.warnings.concat('Ping-pong motion intentionally revisits slice positions on the return sweep; frame-pitch thickness is matched to adjacent frame travel.');
+            if (settings.sequence.volume_height_cm > settings.sequence.travel_cm) {
+                settings.warnings = settings.warnings.concat('The generated sequence volume is taller than the configured display travel; start_cm was clamped to 0.');
             }
             return settings;
         }
@@ -3526,6 +3562,7 @@
             configureCameraForSliceAxis(orthoCamera);
 
             frameHelper.visible = false;
+            if (displayVolumeHelper) displayVolumeHelper.visible = false;
             updateCropPlanes();
             if (cropBox) cropBox.visible = false;
             if (cropTransformControls) {
@@ -3563,14 +3600,6 @@
             renderer.getContext().flush();
         }
 
-        function renderBlankExportFrame() {
-            setSliceWindowUniforms(false);
-            renderer.setRenderTarget(null);
-            renderer.autoClear = true;
-            renderer.clear(true, true, true);
-            renderer.getContext().flush();
-        }
-
         function renderExportFrame(frameInfo, settings) {
             pointMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = 1.0;
@@ -3581,11 +3610,6 @@
                 m.uniforms.uOrthoZoom.value = 1.0;
                 m.uniforms.uViewport.value.set(renderer.domElement.width, renderer.domElement.height);
             });
-
-            if (frameInfo.blank) {
-                renderBlankExportFrame();
-                return;
-            }
 
             if (settings.renderStyle !== 'mesh') {
                 sliceThickness = settings.sliceThicknessModelUnits;
@@ -3757,7 +3781,6 @@
 
             const totalFrames = getTotalExportFrames(settings);
             const frameDurationUs = 1e6 / settings.fps;
-            const manifestFrames = [];
 
             for (let i = 0; i < totalFrames; i++) {
                 if (!isProcessingVideo || videoEncoder.state === 'closed') break;
@@ -3770,7 +3793,6 @@
                 videoEncoder.encode(frame, { keyFrame: settings.renderStyle === 'points' || settings.renderStyle === 'gaussian' || i % settings.fps === 0 });
                 frame.close();
 
-                manifestFrames.push(createManifestFrame(frameInfo, null, settings));
                 updateExportProgress(totalFrames === 1 ? 1 : i / (totalFrames - 1), percentEl, barEl);
 
                 await waitForEncoderQueue(videoEncoder);
@@ -3785,7 +3807,6 @@
             const { buffer } = muxer.target;
             const blob = new Blob([buffer], { type: 'video/mp4' });
             downloadBlob(blob, `slice_render_${settings.width}x${settings.height}_${settings.fps}fps.mp4`);
-            downloadBlob(manifestBlob(settings, manifestFrames), `slice_render_${settings.width}x${settings.height}_${settings.fps}fps.manifest.json`);
         }
 
         async function exportPngSequence(settings, percentEl, barEl) {
@@ -3794,7 +3815,6 @@
             const folder = zip.folder('frames');
             const totalFrames = getTotalExportFrames(settings);
             const digits = String(totalFrames - 1).length;
-            const manifestFrames = [];
 
             for (let i = 0; i < totalFrames; i++) {
                 if (!isProcessingVideo) break;
@@ -3805,14 +3825,13 @@
                 const blob = await canvasToPngBlob();
                 const filename = `frame_${String(i).padStart(digits, '0')}.png`;
                 folder.file(filename, blob, { binary: true, compression: 'STORE' });
-                manifestFrames.push(createManifestFrame(frameInfo, `frames/${filename}`, settings));
 
                 updateExportProgress(totalFrames === 1 ? 1 : i / (totalFrames - 1), percentEl, barEl);
 
                 await yieldToBrowser();
             }
 
-            zip.file('manifest.json', manifestBlob(settings, manifestFrames));
+            zip.file('sequence.json', sequenceJsonBlob(settings));
 
             const zipBlob = await zip.generateAsync({
                 type: 'blob',
@@ -3861,6 +3880,7 @@
             if (viewMode === '3d') setMode('3d'); else setMode('2d');
             setRenderStyle(renderStyle);
             if(frameHelper) frameHelper.visible = restoreFrame;
+            if(displayVolumeHelper) displayVolumeHelper.visible = restoreFrame;
             if (typeof restoreMesh !== 'undefined' && renderStyle === 'mesh') {
                 visualGroup.visible = restoreMesh;
                 document.getElementById('show-mesh').checked = restoreMesh;
@@ -3868,6 +3888,8 @@
                 document.getElementById('show-mesh').checked = visualGroup.visible;
             }
             updateCropHelperVisibility();
+            updateSliceControlVisibility();
+            updateFrameHelper();
         }
 
         function updatePlaneHeight(val) {
@@ -3913,8 +3935,10 @@
             };
             document.getElementById('export-duration').addEventListener('input', refreshAutoThickness);
             document.getElementById('export-fps').addEventListener('change', refreshAutoThickness);
-            document.getElementById('calibration-blank-frames').addEventListener('input', refreshAutoThickness);
-            document.getElementById('calibration-motion-profile').addEventListener('change', refreshAutoThickness);
+            ['display-width-mm', 'display-height-mm', 'display-travel-mm', 'display-placement'].forEach((id) => {
+                document.getElementById(id).addEventListener('input', syncSequencePreview);
+                document.getElementById(id).addEventListener('change', syncSequencePreview);
+            });
             document.getElementById('btn-reset').addEventListener('click', () => {
                 revokeActiveUploadUrl();
                 loadModel(DEFAULT_MODEL);
@@ -4006,8 +4030,14 @@
                 setCaptureScale(captureScale);
             });
             document.getElementById('show-frame').addEventListener('change', updateFrameHelper);
-            document.getElementById('export-w').addEventListener('input', updateFrameHelper);
-            document.getElementById('export-h').addEventListener('input', updateFrameHelper);
+            document.getElementById('export-w').addEventListener('input', () => {
+                updateFrameHelper();
+                syncSequencePreview();
+            });
+            document.getElementById('export-h').addEventListener('input', () => {
+                updateFrameHelper();
+                syncSequencePreview();
+            });
             document.getElementById('file-input').addEventListener('change', (e) => {
                 if(e.target.files[0]) {
                     const file = e.target.files[0];
@@ -4025,6 +4055,8 @@
             syncCropControlsFromBox();
             setCropEnabled(cropEnabled);
             refreshSliceThicknessFromMode();
+            updateSliceControlVisibility();
+            syncSequencePreview();
         }
 
         function setMode(mode) {
@@ -4080,6 +4112,7 @@
                     visualGroup.visible = false; 
                 }
             }
+            updateSliceControlVisibility();
             updateCropHelperVisibility();
         }
         
