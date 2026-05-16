@@ -274,7 +274,10 @@
                     <div class="space-y-2 pt-1 border-t border-gray-700">
                         <div class="flex items-center justify-between">
                              <label class="text-[10px] text-gray-500 uppercase font-bold">Frame Scale</label>
-                             <input type="number" id="zoom-val" min="0.001" max="2.0" step="0.0001" value="1.000" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
+                             <div class="flex items-center gap-1">
+                                 <button type="button" id="fit-display-frame" title="Fit current model inside the display volume" class="px-2 py-0.5 bg-blue-900/30 hover:bg-blue-800/60 text-blue-200 text-[10px] font-bold rounded border border-blue-900/40 transition-colors">Fit</button>
+                                 <input type="number" id="zoom-val" min="0.001" max="2.0" step="0.0001" value="1.000" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
+                             </div>
                         </div>
                         <input type="range" id="zoom-slider" min="0" max="1" step="0.001" value="0.78" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                         
@@ -464,6 +467,7 @@
         const DISPLAY_WIDTH_MM = 536;
         const DISPLAY_HEIGHT_MM = 301.5;
         const DISPLAY_TRAVEL_MM = 480;
+        const DISPLAY_FIT_PADDING = 1.01;
         const CROP_MIN_SIZE = 0.01;
         const CROP_FIT_PADDING = 1.02;
         const EXPORT_LARGE_WARNING_BYTES = 1.5 * 1024 * 1024 * 1024;
@@ -535,6 +539,7 @@
         
         // Point Settings
         let pointSize = DEFAULT_POINT_SIZE;
+        let pointPixelScale = 1.0;
         let pointDrawFraction = DEFAULT_POINT_DENSITY;
         let sliceThickness = DEFAULT_SLICE_THICKNESS;
         let manualSliceThickness = DEFAULT_SLICE_THICKNESS;
@@ -549,7 +554,7 @@
         // Export State
         let isProcessingVideo = false;
         let captureScale = 1.0; 
-        let preExportState = { width: 0, height: 0, pixelRatio: 1 };
+        let preExportState = { width: 0, height: 0, pixelRatio: 1, drawingBufferWidth: 0, drawingBufferHeight: 0 };
         let activeUploadUrl = null;
         let modelLoadId = 0;
         let jsZipPromise = null;
@@ -677,6 +682,25 @@
             gaussianMaterials.forEach(m => m.uniforms.size.value = pointSize);
         }
 
+        function setPointPixelScale(value) {
+            pointPixelScale = Math.max(0.001, finiteNumber(value, 1.0));
+            pointMaterials.forEach((material) => {
+                if (material.uniforms.uPointPixelScale) {
+                    material.uniforms.uPointPixelScale.value = pointPixelScale;
+                }
+            });
+        }
+
+        function getPointExportPixelScale(exportHeight) {
+            const previewHeight = Math.max(
+                1,
+                preExportState.drawingBufferHeight ||
+                renderer.domElement.height ||
+                Math.round(window.innerHeight * renderer.getPixelRatio())
+            );
+            return Math.max(0.001, finiteNumber(exportHeight, previewHeight) / previewHeight);
+        }
+
         function setCaptureScale(value, source = '') {
             captureScale = clamp(finiteNumber(value, captureScale), FRAME_SCALE_MIN, FRAME_SCALE_MAX);
             const slider = document.getElementById('zoom-slider');
@@ -749,6 +773,95 @@
                 travelUnits,
                 centerDepth: minDepth + travelUnits / 2
             };
+        }
+
+        function getBoxCorners(box) {
+            const min = box.min;
+            const max = box.max;
+            return [
+                new THREE.Vector3(min.x, min.y, min.z),
+                new THREE.Vector3(max.x, min.y, min.z),
+                new THREE.Vector3(min.x, max.y, min.z),
+                new THREE.Vector3(max.x, max.y, min.z),
+                new THREE.Vector3(min.x, min.y, max.z),
+                new THREE.Vector3(max.x, min.y, max.z),
+                new THREE.Vector3(min.x, max.y, max.z),
+                new THREE.Vector3(max.x, max.y, max.z)
+            ];
+        }
+
+        function getProjectedRange(points, axis) {
+            let min = Infinity;
+            let max = -Infinity;
+            points.forEach((point) => {
+                const value = point.dot(axis);
+                min = Math.min(min, value);
+                max = Math.max(max, value);
+            });
+            return { min, max, span: Math.max(0, max - min) };
+        }
+
+        function getModelDisplayFitExtents() {
+            const boundsWrapper = getBoundsWrapper();
+            if (!boundsWrapper) return null;
+            boundsWrapper.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(boundsWrapper);
+            if (box.isEmpty()) return null;
+
+            const slice = getSliceAxisDefinition();
+            const forward = slice.vector.clone().negate().normalize();
+            const vertical = slice.cameraUp.clone().normalize();
+            const horizontal = new THREE.Vector3().crossVectors(forward, vertical).normalize();
+            const depth = slice.vector.clone().normalize();
+            const corners = getBoxCorners(box);
+            const horizontalRange = getProjectedRange(corners, horizontal);
+            const verticalRange = getProjectedRange(corners, vertical);
+            const depthRange = getProjectedRange(corners, depth);
+
+            return {
+                widthUnits: Math.max(Math.abs(horizontalRange.min), Math.abs(horizontalRange.max)) * 2,
+                heightUnits: Math.max(Math.abs(verticalRange.min), Math.abs(verticalRange.max)) * 2,
+                depthUnits: depthRange.span
+            };
+        }
+
+        function fitDisplayFrameToModel() {
+            const extents = getModelDisplayFitExtents();
+            if (!extents) {
+                alert("No model is loaded yet.");
+                return;
+            }
+
+            const display = getMovingDisplayInputs();
+            const displayWidthCm = display.widthMm / 10;
+            const displayHeightCm = display.heightMm / 10;
+            const travelCm = display.travelMm / 10;
+            if (travelCm <= 0 && extents.depthUnits > 0) {
+                alert("Travel must be greater than 0 mm to fit the model depth.");
+                return;
+            }
+
+            const aspect = display.exportWidth / display.exportHeight;
+            const cmPerModelUnitAtScaleOne = Math.min(
+                displayWidthCm / (FRUSTUM_SIZE * aspect),
+                displayHeightCm / FRUSTUM_SIZE
+            );
+            const requiredScale = Math.max(
+                FRAME_SCALE_MIN,
+                extents.widthUnits * cmPerModelUnitAtScaleOne / displayWidthCm,
+                extents.heightUnits * cmPerModelUnitAtScaleOne / displayHeightCm,
+                travelCm > 0 ? extents.depthUnits * cmPerModelUnitAtScaleOne / travelCm : FRAME_SCALE_MIN
+            ) * DISPLAY_FIT_PADDING;
+            const nextScale = clamp(requiredScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX);
+
+            setCaptureScale(nextScale);
+            const checkbox = document.getElementById('show-frame');
+            if (checkbox) checkbox.checked = true;
+            updateFrameHelper();
+
+            if (requiredScale > FRAME_SCALE_MAX) {
+                alert("The model needs more than the maximum Frame Scale to fit inside the current display boundaries.");
+            }
         }
 
         function getActiveExportFrameCount(settings) {
@@ -1683,6 +1796,7 @@
                 m.uniforms.uIsOrtho.value = isOrtho;
                 m.uniforms.uOrthoZoom.value = orthoZoom;
             });
+            if (pointPixelScale !== 1.0) setPointPixelScale(1.0);
             gaussianMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = isOrtho;
                 m.uniforms.uOrthoZoom.value = orthoZoom;
@@ -1774,6 +1888,7 @@
                 uniforms: {
                     map: { value: texture || null },
                     size: { value: pointSize },
+                    uPointPixelScale: { value: pointPixelScale },
                     diffuse: { value: new THREE.Color(color) },
                     uIsOrtho: { value: 0.0 },
                     uOrthoZoom: { value: 1.0 },
@@ -1785,6 +1900,7 @@
                 vertexShader: `
                     ${hasVertexColors ? 'attribute vec3 color;' : ''}
                     uniform float size;
+                    uniform float uPointPixelScale;
                     uniform float uIsOrtho;
                     uniform float uOrthoZoom;
                     uniform vec3 uSliceAxis;
@@ -1801,10 +1917,10 @@
                         
                         if (uIsOrtho > 0.5) {
                             // Ortho Size: Fixed pixel size * zoom factor (approx 60x scalar)
-                            gl_PointSize = size * 60.0 * uOrthoZoom;
+                            gl_PointSize = size * 60.0 * uOrthoZoom * uPointPixelScale;
                         } else {
                             // Perspective Size: Attenuate by depth
-                            gl_PointSize = size * ( 50.0 / -mvPosition.z );
+                            gl_PointSize = size * ( 50.0 / -mvPosition.z ) * uPointPixelScale;
                         }
                         
                         gl_Position = projectionMatrix * mvPosition;
@@ -3538,8 +3654,10 @@
         function prepareExportRenderState(settings) {
             const width = settings.width;
             const height = settings.height;
+            settings.pointPixelScale = getPointExportPixelScale(height);
             renderer.setPixelRatio(1);
             renderer.setSize(width, height);
+            setPointPixelScale(settings.pointPixelScale);
             disposeRenderTarget();
 
             renderTarget = new THREE.WebGLRenderTarget(width, height, {
@@ -3604,6 +3722,7 @@
             pointMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = 1.0;
                 m.uniforms.uOrthoZoom.value = 1.0;
+                if (m.uniforms.uPointPixelScale) m.uniforms.uPointPixelScale.value = settings.pointPixelScale || 1.0;
             });
             gaussianMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = 1.0;
@@ -3719,6 +3838,8 @@
                 preExportState.width = window.innerWidth;
                 preExportState.height = window.innerHeight;
                 preExportState.pixelRatio = renderer.getPixelRatio();
+                preExportState.drawingBufferWidth = renderer.domElement.width;
+                preExportState.drawingBufferHeight = renderer.domElement.height;
                 didPrepareRenderState = true;
 
                 isAnimate = false;
@@ -3859,6 +3980,7 @@
         }
 
         function restoreState(restoreFrame, restoreMesh) {
+            setPointPixelScale(1.0);
             renderer.setPixelRatio(preExportState.pixelRatio);
             renderer.setSize(preExportState.width, preExportState.height);
             
@@ -4029,6 +4151,7 @@
             document.getElementById('zoom-val').addEventListener('change', () => {
                 setCaptureScale(captureScale);
             });
+            document.getElementById('fit-display-frame').addEventListener('click', fitDisplayFrameToModel);
             document.getElementById('show-frame').addEventListener('change', updateFrameHelper);
             document.getElementById('export-w').addEventListener('input', () => {
                 updateFrameHelper();
