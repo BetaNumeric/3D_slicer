@@ -557,6 +557,7 @@
         let preExportState = { width: 0, height: 0, pixelRatio: 1, drawingBufferWidth: 0, drawingBufferHeight: 0 };
         let activeUploadUrl = null;
         let modelLoadId = 0;
+        let currentModelBaseName = 'model';
         let jsZipPromise = null;
         const gaussianSortMatrix = new THREE.Matrix4();
 
@@ -825,10 +826,11 @@
             };
         }
 
-        function fitDisplayFrameToModel() {
+        function fitDisplayFrameToModel(options = {}) {
+            const { silent = false, showFrame = true } = options;
             const extents = getModelDisplayFitExtents();
             if (!extents) {
-                alert("No model is loaded yet.");
+                if (!silent) alert("No model is loaded yet.");
                 return;
             }
 
@@ -837,7 +839,7 @@
             const displayHeightCm = display.heightMm / 10;
             const travelCm = display.travelMm / 10;
             if (travelCm <= 0 && extents.depthUnits > 0) {
-                alert("Travel must be greater than 0 mm to fit the model depth.");
+                if (!silent) alert("Travel must be greater than 0 mm to fit the model depth.");
                 return;
             }
 
@@ -856,10 +858,10 @@
 
             setCaptureScale(nextScale);
             const checkbox = document.getElementById('show-frame');
-            if (checkbox) checkbox.checked = true;
+            if (checkbox && showFrame) checkbox.checked = true;
             updateFrameHelper();
 
-            if (requiredScale > FRAME_SCALE_MAX) {
+            if (requiredScale > FRAME_SCALE_MAX && !silent) {
                 alert("The model needs more than the maximum Frame Scale to fit inside the current display boundaries.");
             }
         }
@@ -1527,6 +1529,25 @@
         function evenPositiveInteger(value, fallback) {
             const next = Math.max(2, finiteInteger(value, fallback));
             return next % 2 === 0 ? next : next - 1;
+        }
+
+        function getModelBaseName(url = '', fileName = '') {
+            const source = fileName || (url && !url.startsWith('blob:') ? url.split('?')[0].split('#')[0] : '');
+            const rawName = (source.split('/').pop() || 'model').trim();
+            const decodedName = (() => {
+                try {
+                    return decodeURIComponent(rawName);
+                } catch (error) {
+                    return rawName;
+                }
+            })();
+            const withoutExtension = decodedName.replace(/\.[^/.\\]+$/, '') || 'model';
+            const safeName = withoutExtension
+                .replace(/[<>:"/\\|?*\x00-\x1F]+/g, '_')
+                .replace(/\s+/g, '_')
+                .replace(/^\.+|\.+$/g, '')
+                .replace(/_+/g, '_');
+            return safeName || 'model';
         }
 
         function revokeBlobUrl(url) {
@@ -3046,6 +3067,7 @@
             toggleOutlineMode(document.getElementById('outline-mode').checked);
             setRenderStyle(renderStyle);
             resetOrientationUI();
+            fitDisplayFrameToModel({ silent: true, showFrame: false });
             refreshSliceThicknessFromMode();
             updateFrameHelper();
             updateCropHelperVisibility();
@@ -3303,6 +3325,7 @@
                     disposeLoadedAsset(asset, extension);
                     return;
                 }
+                currentModelBaseName = getModelBaseName(url, fileName);
 
                 clearGroup(visualGroup);
                 clearGroup(stencilGroup);
@@ -3641,6 +3664,7 @@
                 warnings: resolved.warnings,
                 sequence,
                 sliceThicknessMode: thicknessMode,
+                exportBaseName: currentModelBaseName || 'model',
                 estimatedBitrate
             };
             settings.framePitchModelUnits = getPitchMatchedSliceThickness(settings);
@@ -3927,13 +3951,13 @@
 
             const { buffer } = muxer.target;
             const blob = new Blob([buffer], { type: 'video/mp4' });
-            downloadBlob(blob, `slice_render_${settings.width}x${settings.height}_${settings.fps}fps.mp4`);
+            downloadBlob(blob, `${settings.exportBaseName}.mp4`);
         }
 
         async function exportPngSequence(settings, percentEl, barEl) {
             const JSZip = await loadJSZip();
             const zip = new JSZip();
-            const folder = zip.folder('frames');
+            const folder = zip.folder(settings.exportBaseName);
             const totalFrames = getTotalExportFrames(settings);
             const digits = String(totalFrames - 1).length;
 
@@ -3944,7 +3968,7 @@
                 renderExportFrame(frameInfo, settings);
 
                 const blob = await canvasToPngBlob();
-                const filename = `frame_${String(i).padStart(digits, '0')}.png`;
+                const filename = `${settings.exportBaseName}_frame_${String(i).padStart(digits, '0')}.png`;
                 folder.file(filename, blob, { binary: true, compression: 'STORE' });
 
                 updateExportProgress(totalFrames === 1 ? 1 : i / (totalFrames - 1), percentEl, barEl);
@@ -3952,7 +3976,7 @@
                 await yieldToBrowser();
             }
 
-            zip.file('sequence.json', sequenceJsonBlob(settings));
+            folder.file('sequence.json', sequenceJsonBlob(settings));
 
             const zipBlob = await zip.generateAsync({
                 type: 'blob',
@@ -3963,7 +3987,7 @@
                 updateExportProgress(progress, percentEl, barEl);
             });
 
-            downloadBlob(zipBlob, `slice_frames_${settings.width}x${settings.height}_${settings.fps}fps.zip`);
+            downloadBlob(zipBlob, `${settings.exportBaseName}.zip`);
         }
 
         function downloadBlob(blob, filename) {
