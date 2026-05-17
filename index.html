@@ -145,6 +145,25 @@
                                 <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                                 <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
                             </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-gray-500 w-3">S</span>
+                                <input type="range" id="model-scale" min="0.05" max="5" step="0.001" value="1" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                                <input type="number" id="num-model-scale" min="0.05" max="5" step="0.001" value="1.000" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-amber-500 transition-colors">
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Viewport Handles</label>
+                                    <label class="flex items-center gap-1 text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                        <span>Show</span>
+                                        <input type="checkbox" id="model-handles-enabled" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                                    </label>
+                                </div>
+                                <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
+                                    <button type="button" id="model-mode-move" class="text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow">Move</button>
+                                    <button type="button" id="model-mode-rotate" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Rotate</button>
+                                    <button type="button" id="model-mode-scale" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Scale</button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Translation -->
@@ -167,7 +186,7 @@
                             </div>
                             <div class="flex gap-2 min-w-0 w-full mt-1">
                                 <button onclick="centerModel()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Center</button>
-                                <button onclick="resetOrientationUI(); ['x','y','z'].forEach(a => { const el = document.getElementById(`pos-model-${a}`); if(el) el.value=0; const nel = document.getElementById(`num-pos-model-${a}`); if (nel) nel.value=0; }); updateOrientation();" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Reset</button>
+                                <button onclick="resetModelTransform()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Reset</button>
                             </div>
                         </div>
 
@@ -512,6 +531,7 @@
         let capMesh;
         let frameHelper, displayVolumeHelper; 
         let cropBox, cropBoxFill, cropBoxEdges, cropTransformControls;
+        let modelTransformProxy, modelTransformControls;
         let isAnimate = false;
         let scanSpeed = 0.5;
         let time = 0;
@@ -547,14 +567,29 @@
         let showFullPointCloud = false;
         let cropEnabled = false;
         let cropControlsMode = 'scale';
+        let modelControlsEnabled = false;
+        let modelControlsMode = 'move';
+        let modelScaleMultiplier = 1.0;
         let cropBoxInitialized = false;
         let isSyncingCropControls = false;
+        let isSyncingModelControls = false;
         const cropPlanes = Array.from({ length: 6 }, () => new THREE.Plane());
 
         // Export State
         let isProcessingVideo = false;
         let captureScale = 1.0; 
-        let preExportState = { width: 0, height: 0, pixelRatio: 1, drawingBufferWidth: 0, drawingBufferHeight: 0 };
+        let preExportState = {
+            width: 0,
+            height: 0,
+            pixelRatio: 1,
+            drawingBufferWidth: 0,
+            drawingBufferHeight: 0,
+            controlsEnabled: true,
+            controlsEnableRotate: true,
+            controlsEnableZoom: true,
+            controlsEnablePan: true,
+            canvasPointerEvents: ''
+        };
         let activeUploadUrl = null;
         let modelLoadId = 0;
         let currentModelBaseName = 'model';
@@ -1091,6 +1126,171 @@
             applyPointClippingPlanes(!showFullPointCloud);
             updateCropHelperVisibility();
             syncCropControlsFromBox();
+        }
+
+        function getPrimaryModelWrapper() {
+            return activeWrappers.visual || activeWrappers.points || activeWrappers.gaussian;
+        }
+
+        function getPrimaryModelBaseScale() {
+            const wrapper = getPrimaryModelWrapper();
+            return wrapper?.userData?.baseScale || Math.abs(wrapper?.scale?.x) || 1;
+        }
+
+        function setModelControlValue(id, value, force = false) {
+            const input = document.getElementById(id);
+            if (!input || (!force && document.activeElement === input)) return;
+            input.value = value;
+        }
+
+        function setModelPositionControlRanges() {
+            const wrapper = getBoundsWrapper();
+            let range = 5;
+            if (wrapper) {
+                wrapper.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(wrapper);
+                if (!box.isEmpty()) {
+                    const size = box.getSize(new THREE.Vector3());
+                    range = Math.max(range, size.x * 2.5, size.y * 2.5, size.z * 2.5);
+                }
+            }
+            try {
+                const metrics = getDisplayVolumeMetrics();
+                range = Math.max(range, metrics.displayWidthUnits, metrics.displayHeightUnits, metrics.travelUnits);
+            } catch (error) {
+                // Display metrics may be unavailable while the first model is still loading.
+            }
+            ['x', 'y', 'z'].forEach((axis) => {
+                const current = Math.abs(finiteNumber(document.getElementById(`pos-model-${axis}`)?.value, 0));
+                range = Math.max(range, current * 1.25);
+            });
+            range = Math.max(1, Number(range.toFixed(2)));
+            const step = Math.max(0.001, range / 1000);
+            ['x', 'y', 'z'].forEach((axis) => {
+                const slider = document.getElementById(`pos-model-${axis}`);
+                if (!slider) return;
+                slider.min = (-range).toFixed(2);
+                slider.max = range.toFixed(2);
+                slider.step = step.toFixed(4);
+            });
+        }
+
+        function ensureModelPositionSliderRange(axis, value) {
+            const slider = document.getElementById(`pos-model-${axis}`);
+            if (!slider) return;
+            const currentRange = Math.max(Math.abs(finiteNumber(slider.min, -5)), Math.abs(finiteNumber(slider.max, 5)));
+            const neededRange = Math.max(currentRange, Math.abs(finiteNumber(value, 0)) * 1.25, 1);
+            if (neededRange === currentRange) return;
+            slider.min = (-neededRange).toFixed(2);
+            slider.max = neededRange.toFixed(2);
+            slider.step = Math.max(0.001, neededRange / 1000).toFixed(4);
+        }
+
+        function syncModelScaleControls(force = false) {
+            const value = clamp(modelScaleMultiplier, 0.05, 5);
+            setModelControlValue('model-scale', value.toFixed(3), force);
+            setModelControlValue('num-model-scale', value.toFixed(3), force);
+        }
+
+        function syncModelTransformProxyFromControls() {
+            if (!modelTransformProxy) return;
+            const baseScale = getPrimaryModelBaseScale();
+            const uniformScale = Math.max(0.0001, baseScale * modelScaleMultiplier);
+            modelTransformProxy.position.copy(getModelTranslation());
+            modelTransformProxy.rotation.copy(getOrientationEuler());
+            modelTransformProxy.scale.set(uniformScale, uniformScale, uniformScale);
+            modelTransformProxy.updateMatrixWorld(true);
+        }
+
+        function syncModelControlsFromProxy() {
+            if (!modelTransformProxy || !getPrimaryModelWrapper()) return;
+            const baseScale = Math.max(0.000001, getPrimaryModelBaseScale());
+            const proxyScale = (Math.abs(modelTransformProxy.scale.x) + Math.abs(modelTransformProxy.scale.y) + Math.abs(modelTransformProxy.scale.z)) / 3;
+            modelScaleMultiplier = clamp(proxyScale / baseScale, 0.05, 5);
+            const uniformScale = baseScale * modelScaleMultiplier;
+            modelTransformProxy.scale.set(uniformScale, uniformScale, uniformScale);
+
+            isSyncingModelControls = true;
+            ['x', 'y', 'z'].forEach((axis) => {
+                const rawValue = modelTransformProxy.position[axis];
+                ensureModelPositionSliderRange(axis, rawValue);
+                const value = rawValue.toFixed(3);
+                setModelControlValue(`pos-model-${axis}`, value);
+                setModelControlValue(`num-pos-model-${axis}`, value);
+                const degrees = normalizeDegrees(THREE.MathUtils.radToDeg(modelTransformProxy.rotation[axis]));
+                setModelControlValue(`rot-${axis}`, ((degrees + 360) % 360).toFixed(0));
+                setModelControlValue(`num-rot-${axis}`, ((degrees + 360) % 360).toFixed(0));
+            });
+            syncModelScaleControls();
+            isSyncingModelControls = false;
+        }
+
+        function updateModelModeButtons() {
+            const inactive = "text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors";
+            const active = "text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
+            ['move', 'rotate', 'scale'].forEach((mode) => {
+                const button = document.getElementById(`model-mode-${mode}`);
+                if (button) button.className = mode === modelControlsMode ? active : inactive;
+            });
+        }
+
+        function setModelControlsMode(mode) {
+            if (!['move', 'rotate', 'scale'].includes(mode)) mode = 'move';
+            modelControlsMode = mode;
+            if (modelTransformControls) {
+                modelTransformControls.setMode(mode === 'move' ? 'translate' : mode);
+                modelTransformControls.setSpace('local');
+            }
+            updateModelModeButtons();
+        }
+
+        function updateModelTransformCamera() {
+            if (!modelTransformControls || !activeCamera) return;
+            modelTransformControls.camera = activeCamera;
+        }
+
+        function updateModelTransformVisibility() {
+            const visible = modelControlsEnabled && !!getPrimaryModelWrapper() && !isProcessingVideo;
+            if (modelTransformControls) {
+                updateModelTransformCamera();
+                if (modelTransformControls.object !== modelTransformProxy && modelTransformProxy) {
+                    modelTransformControls.attach(modelTransformProxy);
+                }
+                modelTransformControls.visible = visible;
+                modelTransformControls.enabled = visible;
+            }
+        }
+
+        function setModelControlsEnabled(enabled) {
+            modelControlsEnabled = enabled;
+            const checkbox = document.getElementById('model-handles-enabled');
+            if (checkbox) checkbox.checked = modelControlsEnabled;
+            syncModelTransformProxyFromControls();
+            updateModelTransformVisibility();
+        }
+
+        function createModelTransformHelper() {
+            modelTransformProxy = new THREE.Object3D();
+            modelTransformProxy.name = 'Model Transform Proxy';
+            scene.add(modelTransformProxy);
+
+            if (THREE.TransformControls) {
+                modelTransformControls = new THREE.TransformControls(activeCamera, renderer.domElement);
+                modelTransformControls.size = 0.9;
+                modelTransformControls.visible = false;
+                modelTransformControls.enabled = false;
+                modelTransformControls.attach(modelTransformProxy);
+                modelTransformControls.setSpace('local');
+                modelTransformControls.setMode('translate');
+                modelTransformControls.addEventListener('dragging-changed', (event) => {
+                    controls.enabled = !event.value;
+                });
+                modelTransformControls.addEventListener('objectChange', () => {
+                    syncModelControlsFromProxy();
+                    updateOrientation(false);
+                });
+                scene.add(modelTransformControls);
+            }
         }
 
         function createCropBoxHelper() {
@@ -1744,6 +1944,7 @@
             displayVolumeHelper = new THREE.LineSegments(volumeGeo, volumeMat);
             displayVolumeHelper.visible = false;
             scene.add(displayVolumeHelper);
+            createModelTransformHelper();
             createCropBoxHelper();
 
             // 11. Materials
@@ -3024,6 +3225,10 @@
             return new THREE.Vector3(px, py, pz);
         }
 
+        function getModelScaleMultiplier() {
+            return clamp(finiteNumber(document.getElementById('model-scale')?.value, modelScaleMultiplier), 0.05, 5);
+        }
+
         function forEachActiveWrapper(callback) {
             const seen = new Set();
             Object.values(activeWrappers).forEach((wrapper) => {
@@ -3035,12 +3240,11 @@
 
         function applyWrapperTransform(wrapper, euler, translation = null) {
             const baseScale = wrapper.userData.baseScale || Math.abs(wrapper.scale.x) || 1;
+            const uniformScale = baseScale * modelScaleMultiplier;
             wrapper.rotation.copy(euler);
-            wrapper.scale.set(baseScale, flipModelVertical ? -baseScale : baseScale, baseScale);
+            wrapper.scale.set(uniformScale, flipModelVertical ? -uniformScale : uniformScale, uniformScale);
             if (translation) {
-                // Apply translation, considering we can shift it before or after scaling
-                // multiplyScalar makes it act in "normalized model" magnitude
-                wrapper.position.copy(translation).multiplyScalar(baseScale);
+                wrapper.position.copy(translation);
             }
         }
 
@@ -3066,7 +3270,7 @@
 
             toggleOutlineMode(document.getElementById('outline-mode').checked);
             setRenderStyle(renderStyle);
-            resetOrientationUI();
+            resetModelTransform();
             fitDisplayFrameToModel({ silent: true, showFrame: false });
             refreshSliceThicknessFromMode();
             updateFrameHelper();
@@ -3424,11 +3628,16 @@
             slider.min = modelBounds.min;
             slider.max = modelBounds.max;
             slider.step = Math.max(height / 1000, 0.00001);
+            setModelPositionControlRanges();
             syncSequencePreview();
         }
 
-        function updateOrientation() {
+        function updateOrientation(syncProxy = true) {
             if (!activeWrappers.visual) return;
+            if (!isSyncingModelControls) {
+                modelScaleMultiplier = getModelScaleMultiplier();
+                syncModelScaleControls();
+            }
             flipModelVertical = document.getElementById('flip-model').checked;
             const euler = getOrientationEuler();
             const translation = getModelTranslation();
@@ -3436,6 +3645,7 @@
             gaussianGroup.traverse((node) => {
                 if (node.userData.isGaussianSplatRenderer) node.userData.needsSort = true;
             });
+            if (syncProxy) syncModelTransformProxyFromControls();
             
             updateBounds();
             if (!cropEnabled) fitCropBoxToModel();
@@ -3447,6 +3657,7 @@
             if (!isAnimate) {
                 refreshSliceThicknessFromMode();
             }
+            updateModelTransformVisibility();
         }
         
         window.resetOrientation = function() {
@@ -3456,11 +3667,23 @@
         
         function resetOrientationUI() {
             ['x', 'y', 'z'].forEach(axis => {
-                document.getElementById(`rot-${axis}`).value = 0;
-                document.getElementById(`num-rot-${axis}`).value = 0;
+                setModelControlValue(`rot-${axis}`, '0', true);
+                setModelControlValue(`num-rot-${axis}`, '0', true);
             });
             document.getElementById('flip-model').checked = false;
+            modelScaleMultiplier = 1.0;
+            syncModelScaleControls(true);
         }
+
+        function resetModelTransform() {
+            resetOrientationUI();
+            ['x','y','z'].forEach(axis => {
+                setModelControlValue(`pos-model-${axis}`, '0', true);
+                setModelControlValue(`num-pos-model-${axis}`, '0', true);
+            });
+            updateOrientation();
+        }
+        window.resetModelTransform = resetModelTransform;
 
         window.centerModel = function() {
             if (!activeWrappers.visual) return;
@@ -3469,6 +3692,8 @@
             ['x', 'y', 'z'].forEach(axis => {
                 const el = document.getElementById(`pos-model-${axis}`);
                 if (el) el.value = 0;
+                const num = document.getElementById(`num-pos-model-${axis}`);
+                if (num) num.value = 0;
             });
             updateOrientation();
 
@@ -3478,14 +3703,14 @@
             const center = new THREE.Vector3();
             box.getCenter(center);
             
-            const baseScale = activeWrappers.visual.userData.baseScale || 1;
-            const tx = -center.x / baseScale;
-            const ty = -center.y / baseScale;
-            const tz = -center.z / baseScale;
+            const tx = -center.x;
+            const ty = -center.y;
+            const tz = -center.z;
 
             ['x', 'y', 'z'].forEach(axis => {
                 const val = axis === 'x' ? tx : (axis === 'y' ? ty : tz);
-                const fixed = val.toFixed(2);
+                const fixed = val.toFixed(3);
+                ensureModelPositionSliderRange(axis, val);
                 const slider = document.getElementById(`pos-model-${axis}`);
                 if (slider) slider.value = fixed;
                 const num = document.getElementById(`num-pos-model-${axis}`);
@@ -3564,6 +3789,7 @@
             updatePlaneHeight(document.getElementById('slice-slider').value);
             if (!cropEnabled) fitCropBoxToModel();
             updateCropHelperVisibility();
+            updateModelTransformVisibility();
             updateSliceControlVisibility();
         }
         function updateFrameHelper() {
@@ -3682,6 +3908,11 @@
             renderer.setPixelRatio(1);
             renderer.setSize(width, height);
             setPointPixelScale(settings.pointPixelScale);
+            controls.enabled = false;
+            controls.enableRotate = false;
+            controls.enableZoom = false;
+            controls.enablePan = false;
+            renderer.domElement.style.pointerEvents = 'none';
             disposeRenderTarget();
 
             renderTarget = new THREE.WebGLRenderTarget(width, height, {
@@ -3710,6 +3941,10 @@
             if (cropTransformControls) {
                 cropTransformControls.visible = false;
                 cropTransformControls.enabled = false;
+            }
+            if (modelTransformControls) {
+                modelTransformControls.visible = false;
+                modelTransformControls.enabled = false;
             }
             if (settings.renderStyle === 'mesh') {
                 visualGroup.visible = false;
@@ -3864,6 +4099,11 @@
                 preExportState.pixelRatio = renderer.getPixelRatio();
                 preExportState.drawingBufferWidth = renderer.domElement.width;
                 preExportState.drawingBufferHeight = renderer.domElement.height;
+                preExportState.controlsEnabled = controls.enabled;
+                preExportState.controlsEnableRotate = controls.enableRotate;
+                preExportState.controlsEnableZoom = controls.enableZoom;
+                preExportState.controlsEnablePan = controls.enablePan;
+                preExportState.canvasPointerEvents = renderer.domElement.style.pointerEvents || '';
                 didPrepareRenderState = true;
 
                 isAnimate = false;
@@ -4007,6 +4247,7 @@
             setPointPixelScale(1.0);
             renderer.setPixelRatio(preExportState.pixelRatio);
             renderer.setSize(preExportState.width, preExportState.height);
+            renderer.domElement.style.pointerEvents = preExportState.canvasPointerEvents;
             
             disposeRenderTarget();
 
@@ -4024,6 +4265,10 @@
             document.getElementById('rec-overlay').classList.add('hidden');
 
             if (viewMode === '3d') setMode('3d'); else setMode('2d');
+            controls.enabled = preExportState.controlsEnabled;
+            controls.enableRotate = preExportState.controlsEnableRotate;
+            controls.enableZoom = preExportState.controlsEnableZoom;
+            controls.enablePan = preExportState.controlsEnablePan;
             setRenderStyle(renderStyle);
             if(frameHelper) frameHelper.visible = restoreFrame;
             if(displayVolumeHelper) displayVolumeHelper.visible = restoreFrame;
@@ -4034,6 +4279,7 @@
                 document.getElementById('show-mesh').checked = visualGroup.visible;
             }
             updateCropHelperVisibility();
+            updateModelTransformVisibility();
             updateSliceControlVisibility();
             updateFrameHelper();
         }
@@ -4110,9 +4356,28 @@
                     posSlider.addEventListener('input', () => { posNumber.value = posSlider.value; updateOrientation(); });
                     posNumber.addEventListener('input', () => {
                         const val = finiteNumber(posNumber.value, 0);
+                        ensureModelPositionSliderRange(axis, val);
                         posSlider.value = val; updateOrientation();
                     });
                 }
+            });
+            document.getElementById('model-scale').addEventListener('input', (e) => {
+                modelScaleMultiplier = clamp(finiteNumber(e.target.value, modelScaleMultiplier), 0.05, 5);
+                document.getElementById('num-model-scale').value = modelScaleMultiplier.toFixed(3);
+                updateOrientation();
+            });
+            document.getElementById('num-model-scale').addEventListener('input', (e) => {
+                modelScaleMultiplier = clamp(finiteNumber(e.target.value, modelScaleMultiplier), 0.05, 5);
+                document.getElementById('model-scale').value = modelScaleMultiplier;
+                updateOrientation();
+            });
+            document.getElementById('num-model-scale').addEventListener('change', syncModelScaleControls);
+            document.getElementById('model-handles-enabled').addEventListener('change', (e) => setModelControlsEnabled(e.target.checked));
+            ['move', 'rotate', 'scale'].forEach((mode) => {
+                document.getElementById(`model-mode-${mode}`).addEventListener('click', () => {
+                    setModelControlsMode(mode);
+                    setModelControlsEnabled(true);
+                });
             });
             
             document.getElementById('outline-mode').addEventListener('change', (e) => toggleOutlineMode(e.target.checked));
@@ -4198,6 +4463,9 @@
             updateSliceAxisUI();
             setPointSize(pointSize);
             setCaptureScale(captureScale);
+            syncModelScaleControls();
+            setModelControlsMode(modelControlsMode);
+            setModelControlsEnabled(modelControlsEnabled);
             setCropControlsMode(cropControlsMode);
             syncCropControlsFromBox();
             setCropEnabled(cropEnabled);
@@ -4261,6 +4529,7 @@
             }
             updateSliceControlVisibility();
             updateCropHelperVisibility();
+            updateModelTransformVisibility();
         }
         
         window.toggle3DProjection = function(isOrtho) {
@@ -4297,6 +4566,7 @@
             controls.object = activeCamera;
             controls.update();
             updateCropHelperVisibility();
+            updateModelTransformVisibility();
         }
 
         window.setCapColor = function(hexStr) {
