@@ -48,36 +48,32 @@
         <div id="controls-panel" class="bg-gray-900/90 backdrop-blur-md rounded-xl shadow-2xl border border-gray-800 pointer-events-auto overflow-hidden transition-all duration-300 w-full">
             
             <!-- Header -->
-            <div class="flex items-center justify-between p-4 bg-black/50 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
+            <div class="flex items-center justify-between px-3 py-2 bg-black/40 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
                 <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-                    <h1 class="text-sm font-bold text-gray-100 tracking-wide">SLICE VISUALIZER V6.2</h1>
+                    <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                    <h1 class="text-xs font-bold text-gray-100 tracking-wide">Slice Visualizer</h1>
                 </div>
                 <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
             </div>
 
             <!-- Always-visible view controls -->
-            <div id="persistent-controls" class="p-3 space-y-3 bg-black/30 border-b border-gray-800">
-                <div class="bg-black/40 p-1 rounded-lg border border-gray-800">
-                    <div class="flex shadow-inner mb-2">
+            <div id="persistent-controls" class="p-2 space-y-2 bg-black/25 border-b border-gray-800">
+                <div class="bg-black/30 p-1 rounded border border-gray-800">
+                    <div class="grid grid-cols-[1fr_1fr_auto] gap-1">
                         <button id="btn-3d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md">3D View</button>
                         <button id="btn-2d" class="flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800">2D Map</button>
-                    </div>
-                    
-                    <!-- 3D Projection Toggle -->
-                    <div id="projection-toggle" class="flex justify-end px-1">
-                        <label class="flex items-center gap-2 text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors">
-                            <span>Use Orthographic Camera</span>
-                            <input type="checkbox" id="ortho-3d-check" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" onchange="toggle3DProjection(this.checked)">
+                        <label id="projection-toggle" class="flex items-center justify-center px-2 rounded text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white hover:bg-gray-800 transition-colors" title="Use orthographic camera">
+                            <span>Ortho</span>
+                            <input type="checkbox" id="ortho-3d-check" class="sr-only" onchange="toggle3DProjection(this.checked)">
                         </label>
                     </div>
                 </div>
 
-                <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/60 border border-gray-800 rounded-lg px-3 py-2">
+                <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/50 border border-gray-800 rounded px-2 py-1.5">
                     <span>Show Full Point Cloud</span>
                     <input type="checkbox" id="show-full-cloud" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
                 </label>
@@ -100,25 +96,10 @@
             </div>
 
             <!-- Content -->
-            <div id="panel-content" class="p-5 space-y-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
-
-                <!-- Automation -->
-                <div class="bg-black/20 rounded-lg p-3 border border-gray-800 space-y-3">
-                    <div class="flex items-center justify-between">
-                        <label class="text-xs font-bold uppercase text-gray-400">Auto Scan</label>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="anim-toggle" class="sr-only peer">
-                            <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold uppercase text-gray-500 mb-1 block">Speed</label>
-                        <input type="range" id="speed-slider" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                    </div>
-                </div>
+            <div id="panel-content" class="p-4 space-y-4 max-h-[calc(100vh-18rem)] overflow-y-auto">
 
                 <!-- Transform & Crop Controls -->
-                <div class="space-y-2 pt-2 border-t border-gray-800">
+                <div class="space-y-2">
                     <div class="flex justify-between items-center cursor-pointer select-none" onclick="document.getElementById('transform-crop-controls').classList.toggle('hidden');">
                          <label class="text-[10px] text-gray-500 uppercase font-bold hover:text-gray-300 transition-colors">Transform & Crop</label>
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
@@ -419,32 +400,62 @@
                       </div>
                 </div>
 
-                <hr class="border-gray-800">
-
-                <!-- Upload -->
-                <div>
-                    <div class="mb-2">
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Import As</label>
-                        <select id="import-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none">
-                            <option value="auto" selected>Auto Detect</option>
-                            <option value="mesh">Mesh Surface</option>
-                            <option value="points">Point Cloud</option>
-                        </select>
+                <!-- Info -->
+                <div class="bg-gray-800/40 rounded-lg border border-gray-800 overflow-hidden">
+                    <div class="flex items-center justify-between p-3 cursor-pointer select-none hover:bg-gray-800/40 transition-colors" id="info-panel-header">
+                        <label class="text-xs font-bold uppercase text-gray-500 cursor-pointer">Info</label>
+                        <div class="flex items-center gap-2">
+                            <span id="info-fps-compact" class="text-[10px] text-green-300 font-mono">- fps</span>
+                            <button type="button" id="btn-info-toggle" class="text-gray-500 hover:text-white transition-transform rotate-180" aria-label="Toggle info panel">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                        </div>
                     </div>
-                    <label class="flex flex-col w-full cursor-pointer hover:bg-gray-800/50 transition p-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group mb-2">
-                        <span class="text-xs font-bold text-gray-400 group-hover:text-blue-400 mb-1">Load Model or Point Cloud</span>
+                    <div id="info-panel-content" class="hidden px-3 pb-3 space-y-2">
+                        <div class="flex justify-end">
+                            <button type="button" id="btn-info-refresh" class="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px] font-bold rounded border border-gray-700 transition-colors">Refresh</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+                            <span class="text-gray-500 uppercase font-bold">Model</span>
+                            <span id="info-model-name" class="text-gray-300 font-mono text-right truncate">-</span>
+                            <span class="text-gray-500 uppercase font-bold">FPS</span>
+                            <span id="info-fps" class="text-green-300 font-mono text-right">-</span>
+                            <span class="text-gray-500 uppercase font-bold">Source Points</span>
+                            <span id="info-source-points" class="text-blue-300 font-mono text-right">-</span>
+                            <span class="text-gray-500 uppercase font-bold">Preview Draw</span>
+                            <span id="info-preview-points" class="text-blue-300 font-mono text-right">-</span>
+                            <span class="text-gray-500 uppercase font-bold">Current Slice</span>
+                            <span id="info-slice-points" class="text-cyan-300 font-mono text-right">Refresh</span>
+                            <span class="text-gray-500 uppercase font-bold">Crop Area</span>
+                            <span id="info-crop-points" class="text-cyan-300 font-mono text-right">Off</span>
+                            <span class="text-gray-500 uppercase font-bold">Slice + Crop</span>
+                            <span id="info-slice-crop-points" class="text-cyan-300 font-mono text-right">Off</span>
+                            <span class="text-gray-500 uppercase font-bold">Bounds XYZ</span>
+                            <span id="info-bounds" class="text-gray-300 font-mono text-right">-</span>
+                            <span class="text-gray-500 uppercase font-bold">GPU Cache</span>
+                            <span id="info-gpu-cache" class="text-amber-300 font-mono text-right">-</span>
+                            <span class="text-gray-500 uppercase font-bold">CPU Cache</span>
+                            <span id="info-cpu-cache" class="text-amber-300 font-mono text-right">-</span>
+                        </div>
+                        <div id="info-status" class="text-[10px] text-gray-600 font-mono">Exact slice/crop counts update on refresh.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fixed Import Footer -->
+            <div id="import-footer" class="p-3 bg-black/50 border-t border-gray-800 space-y-2">
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                    <label class="flex items-center justify-center min-w-0 cursor-pointer hover:bg-gray-800/60 transition px-3 py-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
                         <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply,.splat,.sog" class="hidden"/>
-                        <span class="text-[10px] text-gray-600 group-hover:text-gray-500">GLB, GLTF, OBJ, STL, PLY, SPLAT, SOG</span>
+                        <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Load Model / Point Cloud</span>
                     </label>
-                    <button id="btn-reset" class="w-full py-1 text-[10px] font-bold text-gray-500 hover:text-white bg-transparent border border-gray-700 hover:bg-gray-700 rounded transition-all">
-                        Reset to Default Model
+                    <button id="btn-reset" class="px-3 py-2 text-[10px] font-bold text-gray-500 hover:text-white bg-gray-900/70 border border-gray-700 hover:bg-gray-700 rounded transition-all">
+                        Reset
                     </button>
                 </div>
-                
-                 <!-- Status -->
-                 <div id="loading-status" class="text-xs text-amber-400 font-mono hidden flex items-center gap-2">
-                    <svg id="loading-spinner" class="animate-spin h-3 w-3 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    <span id="status-text">Loading...</span>
+                <div id="loading-status" class="text-[10px] text-amber-400 font-mono hidden flex items-center gap-2 min-h-3">
+                    <svg id="loading-spinner" class="animate-spin h-3 w-3 text-amber-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span id="status-text" class="truncate">Loading...</span>
                 </div>
             </div>
         </div>
@@ -593,6 +604,11 @@
         let activeUploadUrl = null;
         let modelLoadId = 0;
         let currentModelBaseName = 'model';
+        let infoRefreshToken = 0;
+        let infoPanelOpen = false;
+        let fpsFrameCount = 0;
+        let fpsLastTime = performance.now();
+        let currentFps = 0;
         let jsZipPromise = null;
         const gaussianSortMatrix = new THREE.Matrix4();
 
@@ -672,6 +688,12 @@
             updateFrameHelper();
             updateSliceAxisUI();
             if (viewMode === '2d') setMode('2d');
+        }
+
+        function setAutoScanEnabled(enabled) {
+            isAnimate = !!enabled;
+            const toggle = document.getElementById('anim-toggle');
+            if (toggle) toggle.checked = isAnimate;
         }
 
         function formatBytes(bytes) {
@@ -1059,6 +1081,7 @@
             cropBoxInitialized = true;
             updateCropPlanes();
             syncCropControlsFromBox();
+            markInfoExactCountsStale();
         }
 
         function fitCropBoxToModel() {
@@ -1126,6 +1149,7 @@
             applyPointClippingPlanes(!showFullPointCloud);
             updateCropHelperVisibility();
             syncCropControlsFromBox();
+            markInfoExactCountsStale();
         }
 
         function getPrimaryModelWrapper() {
@@ -1341,6 +1365,7 @@
                     cropBoxInitialized = true;
                     updateCropPlanes();
                     syncCropControlsFromBox();
+                    markInfoExactCountsStale();
                 });
                 scene.add(cropTransformControls);
             }
@@ -1537,6 +1562,238 @@
                 if (node.isPoints && node.geometry?.attributes?.position) nodes.push(node);
             });
             return nodes;
+        }
+
+        function formatInfoCount(value) {
+            if (value === null || value === undefined) return '-';
+            if (!Number.isFinite(value)) return '-';
+            return Math.round(value).toLocaleString();
+        }
+
+        function setInfoText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        function setInfoPanelOpen(open) {
+            infoPanelOpen = !!open;
+            const content = document.getElementById('info-panel-content');
+            const toggle = document.getElementById('btn-info-toggle');
+            if (content) content.classList.toggle('hidden', !infoPanelOpen);
+            if (toggle) toggle.classList.toggle('rotate-180', !infoPanelOpen);
+            if (infoPanelOpen) updateInfoPanelBasic();
+        }
+
+        function toggleInfoPanel() {
+            setInfoPanelOpen(!infoPanelOpen);
+        }
+
+        function updateInfoFps(timestamp = performance.now()) {
+            fpsFrameCount++;
+            const elapsed = timestamp - fpsLastTime;
+            if (elapsed < 500) return;
+            currentFps = fpsFrameCount * 1000 / elapsed;
+            fpsFrameCount = 0;
+            fpsLastTime = timestamp;
+            const label = `${Math.round(currentFps)} fps`;
+            setInfoText('info-fps-compact', label);
+            setInfoText('info-fps', label);
+        }
+
+        function estimateAttributeBytes(attribute) {
+            if (!attribute?.array?.byteLength) return 0;
+            return attribute.array.byteLength;
+        }
+
+        function estimateGeometryBytes(geometry) {
+            if (!geometry) return 0;
+            let bytes = 0;
+            Object.keys(geometry.attributes || {}).forEach((name) => {
+                bytes += estimateAttributeBytes(geometry.attributes[name]);
+            });
+            bytes += estimateAttributeBytes(geometry.index);
+            return bytes;
+        }
+
+        function estimateMaterialCacheBytes(material) {
+            let cpuBytes = 0;
+            let gpuBytes = 0;
+            const mat = Array.isArray(material) ? material[0] : material;
+            const texture = mat?.uniforms?.map?.value || mat?.map || null;
+            const image = texture?.image;
+            if (image?.width && image?.height) gpuBytes += image.width * image.height * 4;
+            const imageData = texture?.userData?.imageData;
+            if (imageData?.data?.byteLength) cpuBytes += imageData.data.byteLength;
+            return { cpuBytes, gpuBytes };
+        }
+
+        function estimateCacheBytes() {
+            let cpuBytes = 0;
+            let gpuBytes = 0;
+            const seenGeometries = new Set();
+            const seenMaterials = new Set();
+            const visit = (node) => {
+                if (node.geometry && !seenGeometries.has(node.geometry)) {
+                    seenGeometries.add(node.geometry);
+                    const bytes = estimateGeometryBytes(node.geometry);
+                    cpuBytes += bytes;
+                    gpuBytes += bytes;
+                }
+                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                materials.forEach((material) => {
+                    if (!material || seenMaterials.has(material)) return;
+                    seenMaterials.add(material);
+                    const estimate = estimateMaterialCacheBytes(material);
+                    cpuBytes += estimate.cpuBytes;
+                    gpuBytes += estimate.gpuBytes;
+                });
+                const sourceGeometry = node.userData?.sourceGeometry;
+                if (sourceGeometry && !seenGeometries.has(sourceGeometry)) {
+                    seenGeometries.add(sourceGeometry);
+                    const bytes = estimateGeometryBytes(sourceGeometry);
+                    cpuBytes += bytes;
+                    gpuBytes += bytes;
+                }
+                const source = node.userData?.source;
+                if (source) {
+                    Object.values(source).forEach((array) => {
+                        if (array?.byteLength) cpuBytes += array.byteLength;
+                    });
+                }
+            };
+            [visualGroup, stencilGroup, pointGroup, gaussianGroup].forEach((group) => group?.traverse(visit));
+            if (renderTarget) gpuBytes += renderTarget.width * renderTarget.height * 4;
+            return { cpuBytes, gpuBytes };
+        }
+
+        function getInfoPointRecords() {
+            const records = [];
+            const addPointRecords = () => {
+                pointGroup.updateMatrixWorld(true);
+                pointGroup.traverse((node) => {
+                    const position = node.geometry?.attributes?.position;
+                    if (node.isPoints && position) {
+                        const rangeCount = Number.isFinite(node.geometry.drawRange?.count) ? node.geometry.drawRange.count : position.count;
+                        records.push({ node, position, drawCount: Math.min(position.count, rangeCount) });
+                    }
+                });
+            };
+            const addGaussianRecords = () => {
+                gaussianGroup.updateMatrixWorld(true);
+                gaussianGroup.traverse((node) => {
+                    if (!node.userData?.isGaussianSplatRenderer) return;
+                    const position = node.userData.sourceGeometry?.attributes?.position;
+                    if (position) records.push({ node, position, drawCount: node.userData.drawCount || 0 });
+                });
+            };
+
+            if (renderStyle === 'gaussian' && activeWrappers.gaussian) addGaussianRecords();
+            else if (activeWrappers.points) addPointRecords();
+            else addGaussianRecords();
+
+            return records;
+        }
+
+        function getInfoPointSummary(records = getInfoPointRecords()) {
+            return records.reduce((summary, record) => {
+                summary.source += record.position?.count || 0;
+                summary.preview += Math.max(0, Math.min(record.position?.count || 0, record.drawCount || 0));
+                return summary;
+            }, { source: 0, preview: 0 });
+        }
+
+        function updateInfoPanelBasic() {
+            const records = getInfoPointRecords();
+            const summary = getInfoPointSummary(records);
+            setInfoText('info-model-name', currentModelBaseName || 'model');
+            setInfoText('info-fps', currentFps ? `${Math.round(currentFps)} fps` : '-');
+            setInfoText('info-source-points', summary.source ? formatInfoCount(summary.source) : '-');
+            setInfoText('info-preview-points', summary.preview ? formatInfoCount(summary.preview) : '-');
+
+            const boundsWrapper = getBoundsWrapper();
+            if (boundsWrapper) {
+                boundsWrapper.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(boundsWrapper);
+                if (!box.isEmpty()) {
+                    const size = box.getSize(new THREE.Vector3());
+                    setInfoText('info-bounds', `${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
+                }
+            } else {
+                setInfoText('info-bounds', '-');
+            }
+            const cache = estimateCacheBytes();
+            setInfoText('info-gpu-cache', formatBytes(cache.gpuBytes));
+            setInfoText('info-cpu-cache', formatBytes(cache.cpuBytes));
+        }
+
+        function markInfoExactCountsStale() {
+            infoRefreshToken++;
+            updateInfoPanelBasic();
+            setInfoText('info-slice-points', 'Refresh');
+            if (cropEnabled && cropBox) {
+                setInfoText('info-crop-points', 'Refresh');
+                setInfoText('info-slice-crop-points', 'Refresh');
+            } else {
+                setInfoText('info-crop-points', 'Off');
+                setInfoText('info-slice-crop-points', 'Off');
+            }
+            setInfoText('info-status', 'Exact slice/crop counts update on refresh.');
+        }
+
+        async function refreshInfoPanelExact() {
+            const token = ++infoRefreshToken;
+            const records = getInfoPointRecords();
+            updateInfoPanelBasic();
+            if (!records.length) {
+                setInfoText('info-slice-points', '-');
+                setInfoText('info-crop-points', cropEnabled ? '-' : 'Off');
+                setInfoText('info-slice-crop-points', cropEnabled ? '-' : 'Off');
+                setInfoText('info-status', 'No point data available for exact counts.');
+                return;
+            }
+
+            setInfoText('info-status', 'Counting points...');
+            await yieldToBrowser();
+            if (token !== infoRefreshToken) return;
+
+            if (cropEnabled && cropBox) updateCropPlanes();
+            const axis = getSliceAxisDefinition().vector;
+            const center = finiteNumber(document.getElementById('slice-slider')?.value, modelBounds.min);
+            const half = Math.max(0, sliceThickness) / 2;
+            const minSlice = center - half;
+            const maxSlice = center + half;
+            const useCrop = cropEnabled && cropBox;
+            const worldPoint = new THREE.Vector3();
+            let sliceCount = 0;
+            let cropCount = 0;
+            let sliceCropCount = 0;
+            let processed = 0;
+
+            for (const record of records) {
+                record.node.updateMatrixWorld(true);
+                for (let i = 0; i < record.position.count; i++) {
+                    worldPoint.fromBufferAttribute(record.position, i).applyMatrix4(record.node.matrixWorld);
+                    const sliceCoord = worldPoint.dot(axis);
+                    const inSlice = sliceCoord >= minSlice && sliceCoord < maxSlice;
+                    const inCrop = useCrop && isPointInsideCropVolume(worldPoint);
+                    if (inSlice) sliceCount++;
+                    if (inCrop) cropCount++;
+                    if (inSlice && inCrop) sliceCropCount++;
+
+                    processed++;
+                    if (processed % 200000 === 0) {
+                        setInfoText('info-status', `Counting ${formatInfoCount(processed)} points...`);
+                        await yieldToBrowser();
+                        if (token !== infoRefreshToken) return;
+                    }
+                }
+            }
+
+            if (token !== infoRefreshToken) return;
+            setInfoText('info-slice-points', formatInfoCount(sliceCount));
+            setInfoText('info-crop-points', useCrop ? formatInfoCount(cropCount) : 'Off');
+            setInfoText('info-slice-crop-points', useCrop ? formatInfoCount(sliceCropCount) : 'Off');
+            setInfoText('info-status', `Updated ${new Date().toLocaleTimeString()}.`);
         }
 
         function materialDiffuseColor(material) {
@@ -2008,6 +2265,7 @@
         // --- CORE RENDER FUNCTION ---
         function renderFrame() {
             if(isProcessingVideo) return; 
+            updateInfoFps(performance.now());
 
             // Update Point Uniforms every frame for camera switch
             const isOrtho = (activeCamera.isOrthographicCamera) ? 1.0 : 0.0;
@@ -2954,7 +3212,7 @@
         }
 
         function getImportMode() {
-            return document.getElementById('import-mode')?.value || 'auto';
+            return 'auto';
         }
 
         function createImportLoader(extension) {
@@ -3577,6 +3835,7 @@
         function updatePointDensity() {
             const pct = setPointDrawFraction(document.getElementById('point-count').value);
             document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
+            markInfoExactCountsStale();
         }
 
         function applyPointClippingPlanes(useSlab) {
@@ -3658,6 +3917,7 @@
                 refreshSliceThicknessFromMode();
             }
             updateModelTransformVisibility();
+            markInfoExactCountsStale();
         }
         
         window.resetOrientation = function() {
@@ -3791,6 +4051,7 @@
             updateCropHelperVisibility();
             updateModelTransformVisibility();
             updateSliceControlVisibility();
+            markInfoExactCountsStale();
         }
         function updateFrameHelper() {
             if (!frameHelper) return;
@@ -4106,8 +4367,7 @@
                 preExportState.canvasPointerEvents = renderer.domElement.style.pointerEvents || '';
                 didPrepareRenderState = true;
 
-                isAnimate = false;
-                document.getElementById('anim-toggle').checked = false;
+                setAutoScanEnabled(false);
 
                 document.getElementById('rec-overlay').classList.remove('hidden');
                 const percentEl = document.getElementById('rec-percentage');
@@ -4301,26 +4561,32 @@
                 if (document.activeElement !== slider) slider.value = v;
                 const input = document.getElementById('slice-input');
                 if (document.activeElement !== input) input.value = v.toFixed(2);
+                if (!isAnimate) markInfoExactCountsStale();
             }
         }
 
         function setupUI() {
             document.getElementById('slice-slider').addEventListener('input', (e) => {
-                isAnimate = false;
-                document.getElementById('anim-toggle').checked = false;
+                setAutoScanEnabled(false);
                 updatePlaneHeight(e.target.value);
             });
             document.getElementById('slice-input').addEventListener('input', (e) => {
-                isAnimate = false;
-                document.getElementById('anim-toggle').checked = false;
+                setAutoScanEnabled(false);
                 updatePlaneHeight(e.target.value);
             });
-            document.getElementById('anim-toggle').addEventListener('change', (e) => isAnimate = e.target.checked);
-            document.getElementById('speed-slider').addEventListener('input', (e) => scanSpeed = clamp(finiteNumber(e.target.value, scanSpeed), 0.1, 2.0));
             document.getElementById('slice-axis').addEventListener('change', (e) => setSliceAxis(e.target.value));
             document.getElementById('btn-3d').addEventListener('click', () => setMode('3d'));
             document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
             document.getElementById('btn-export').addEventListener('click', startExport);
+            document.getElementById('btn-info-refresh').addEventListener('click', (e) => {
+                e.stopPropagation();
+                refreshInfoPanelExact();
+            });
+            document.getElementById('info-panel-header').addEventListener('click', toggleInfoPanel);
+            document.getElementById('btn-info-toggle').addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleInfoPanel();
+            });
             document.getElementById('export-format').addEventListener('change', updateExportButtonLabel);
             const refreshAutoThickness = () => {
                 if (sliceThicknessMode === 'frame-pitch') refreshSliceThicknessFromMode();
@@ -4472,6 +4738,7 @@
             refreshSliceThicknessFromMode();
             updateSliceControlVisibility();
             syncSequencePreview();
+            markInfoExactCountsStale();
         }
 
         function setMode(mode) {
@@ -4480,13 +4747,13 @@
             const b2 = document.getElementById('btn-2d');
             const projToggle = document.getElementById('projection-toggle');
             const meshCheckbox = document.getElementById('show-mesh');
+            const orthoCheck = document.getElementById('ortho-3d-check');
 
             if (mode === '3d') {
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
-                
-                // Show toggle
-                projToggle.classList.remove('hidden');
+                projToggle.className = "flex items-center justify-center px-2 rounded text-[10px] font-bold cursor-pointer transition-colors " + (isOrtho3D ? "bg-blue-900/50 text-blue-200" : "text-gray-400 hover:text-white hover:bg-gray-800");
+                if (orthoCheck) orthoCheck.checked = isOrtho3D;
                 
                 if (isOrtho3D) {
                     activeCamera = orthoCamera3D;
@@ -4508,9 +4775,7 @@
             } else {
                 b2.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-md";
                 b3.className = "flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all text-gray-400 hover:text-white hover:bg-gray-800";
-                
-                // Hide toggle in 2D
-                projToggle.classList.add('hidden');
+                projToggle.className = "flex items-center justify-center px-2 rounded text-[10px] font-bold text-gray-600 cursor-not-allowed transition-colors opacity-50";
 
                 activeCamera = orthoCamera;
                 activeCamera.zoom = 1; 
@@ -4537,6 +4802,12 @@
             if (viewMode !== '3d') return; 
 
             const target = controls.target.clone();
+            const projToggle = document.getElementById('projection-toggle');
+            const orthoCheck = document.getElementById('ortho-3d-check');
+            if (orthoCheck) orthoCheck.checked = isOrtho3D;
+            if (projToggle) {
+                projToggle.className = "flex items-center justify-center px-2 rounded text-[10px] font-bold cursor-pointer transition-colors " + (isOrtho3D ? "bg-blue-900/50 text-blue-200" : "text-gray-400 hover:text-white hover:bg-gray-800");
+            }
             
             if (isOrtho) {
                 // Switch to Ortho
