@@ -71,6 +71,10 @@
                             <input type="checkbox" id="ortho-3d-check" class="sr-only" onchange="toggle3DProjection(this.checked)">
                         </label>
                     </div>
+                    <div id="ortho-view-buttons" class="hidden grid grid-cols-2 gap-1 mt-1">
+                        <button id="btn-front-view" class="py-1 px-2 rounded text-[10px] font-bold text-gray-300 bg-gray-900 hover:bg-gray-800 hover:text-white transition-colors">Front</button>
+                        <button id="btn-side-view" class="py-1 px-2 rounded text-[10px] font-bold text-gray-300 bg-gray-900 hover:bg-gray-800 hover:text-white transition-colors">Side</button>
+                    </div>
                 </div>
 
                 <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/50 border border-gray-800 rounded px-2 py-1.5">
@@ -313,6 +317,10 @@
                                 </select>
                             </div>
                         </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">Display Offset (mm)</label>
+                            <input type="number" id="display-offset-mm" value="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                        </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-[10px] text-gray-500 uppercase font-bold">Volume (cm)</label>
@@ -497,6 +505,7 @@
         const DISPLAY_WIDTH_MM = 536;
         const DISPLAY_HEIGHT_MM = 301.5;
         const DISPLAY_TRAVEL_MM = 480;
+        const DISPLAY_OFFSET_MM = 0;
         const DISPLAY_FIT_PADDING = 1.01;
         const CROP_MIN_SIZE = 0.01;
         const CROP_FIT_PADDING = 1.02;
@@ -780,20 +789,34 @@
                 widthMm: Math.max(1, finiteNumber(document.getElementById('display-width-mm')?.value, DISPLAY_WIDTH_MM)),
                 heightMm: Math.max(1, finiteNumber(document.getElementById('display-height-mm')?.value, DISPLAY_HEIGHT_MM)),
                 travelMm: Math.max(0, finiteNumber(document.getElementById('display-travel-mm')?.value, DISPLAY_TRAVEL_MM)),
+                offsetMm: finiteNumber(document.getElementById('display-offset-mm')?.value, DISPLAY_OFFSET_MM),
                 placement: document.getElementById('display-placement')?.value === 'bottom' ? 'bottom' : 'center',
                 exportWidth,
                 exportHeight
             };
         }
 
-        function getSequenceInstructions(display = getMovingDisplayInputs()) {
+        function getDisplayCmPerModelUnit(display = getMovingDisplayInputs()) {
             const aspect = display.exportWidth / display.exportHeight;
             const frameHeightUnits = FRUSTUM_SIZE * captureScale;
             const frameWidthUnits = frameHeightUnits * aspect;
             const displayWidthCm = display.widthMm / 10;
             const displayHeightCm = display.heightMm / 10;
+            return Math.min(displayWidthCm / frameWidthUnits, displayHeightCm / frameHeightUnits);
+        }
+
+        function getDisplayOffsetModelUnits(display = getMovingDisplayInputs()) {
+            const cmPerModelUnit = Math.max(0.000001, getDisplayCmPerModelUnit(display));
+            return (display.offsetMm / 10) / cmPerModelUnit;
+        }
+
+        function getOffsetSliceValue(value, display = getMovingDisplayInputs()) {
+            return finiteNumber(value, 0) + getDisplayOffsetModelUnits(display);
+        }
+
+        function getSequenceInstructions(display = getMovingDisplayInputs()) {
             const travelCm = display.travelMm / 10;
-            const cmPerModelUnit = Math.min(displayWidthCm / frameWidthUnits, displayHeightCm / frameHeightUnits);
+            const cmPerModelUnit = getDisplayCmPerModelUnit(display);
             const volumeHeightCm = roundCm(Math.max(0, modelBounds.max - modelBounds.min) * cmPerModelUnit);
             const centeredStart = (travelCm - volumeHeightCm) / 2;
             const startCm = roundCm(display.placement === 'bottom' ? 0 : centeredStart);
@@ -801,6 +824,7 @@
             return {
                 volume_height_cm: volumeHeightCm,
                 start_cm: startCm,
+                display_offset_cm: roundCm(display.offsetMm / 10),
                 cm_per_model_unit: cmPerModelUnit,
                 travel_cm: travelCm
             };
@@ -814,6 +838,7 @@
             volumeEl.value = sequence.volume_height_cm;
             startEl.value = sequence.start_cm;
             updateFrameHelper();
+            if (clippingPlane && capMesh) updatePlaneHeight(document.getElementById('slice-slider')?.value || modelBounds.min);
         }
 
         function getDisplayVolumeMetrics(display = getMovingDisplayInputs()) {
@@ -823,12 +848,14 @@
             const displayHeightUnits = (display.heightMm / 10) / cmPerModelUnit;
             const travelUnits = sequence.travel_cm / cmPerModelUnit;
             const startUnits = sequence.start_cm / cmPerModelUnit;
-            const minDepth = modelBounds.min - startUnits;
+            const offsetUnits = getDisplayOffsetModelUnits(display);
+            const minDepth = modelBounds.min - startUnits + offsetUnits;
 
             return {
                 displayWidthUnits,
                 displayHeightUnits,
                 travelUnits,
+                offsetUnits,
                 centerDepth: minDepth + travelUnits / 2
             };
         }
@@ -859,22 +886,78 @@
             return { min, max, span: Math.max(0, max - min) };
         }
 
+        function createProjectedRanges() {
+            return [
+                { min: Infinity, max: -Infinity },
+                { min: Infinity, max: -Infinity },
+                { min: Infinity, max: -Infinity }
+            ];
+        }
+
+        function expandProjectedRanges(ranges, axes, point) {
+            axes.forEach((axis, index) => {
+                const value = point.dot(axis);
+                ranges[index].min = Math.min(ranges[index].min, value);
+                ranges[index].max = Math.max(ranges[index].max, value);
+            });
+        }
+
+        function finalizeProjectedRanges(ranges) {
+            return ranges.map((range) => ({
+                min: range.min,
+                max: range.max,
+                span: Number.isFinite(range.min) && Number.isFinite(range.max)
+                    ? Math.max(0, range.max - range.min)
+                    : 0
+            }));
+        }
+
+        function getProjectedGeometryRanges(root, axes) {
+            if (!root) return null;
+            const ranges = createProjectedRanges();
+            const point = new THREE.Vector3();
+            let hasPositions = false;
+
+            root.updateMatrixWorld(true);
+            root.traverse((node) => {
+                const geometry = node.userData?.sourceGeometry || node.geometry;
+                const position = geometry?.attributes?.position;
+                if (!position || position.count <= 0) return;
+
+                hasPositions = true;
+                for (let i = 0; i < position.count; i++) {
+                    point.fromBufferAttribute(position, i).applyMatrix4(node.matrixWorld);
+                    expandProjectedRanges(ranges, axes, point);
+                }
+            });
+
+            const projected = finalizeProjectedRanges(ranges);
+            return hasPositions && projected.every((range) => Number.isFinite(range.min) && Number.isFinite(range.max))
+                ? projected
+                : null;
+        }
+
         function getModelDisplayFitExtents() {
-            const boundsWrapper = getBoundsWrapper();
+            const boundsWrapper = cropEnabled ? getBoundsWrapper() : (getPrimaryModelWrapper() || getBoundsWrapper());
             if (!boundsWrapper) return null;
             boundsWrapper.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(boundsWrapper);
-            if (box.isEmpty()) return null;
 
             const slice = getSliceAxisDefinition();
             const forward = slice.vector.clone().negate().normalize();
             const vertical = slice.cameraUp.clone().normalize();
             const horizontal = new THREE.Vector3().crossVectors(forward, vertical).normalize();
             const depth = slice.vector.clone().normalize();
-            const corners = getBoxCorners(box);
-            const horizontalRange = getProjectedRange(corners, horizontal);
-            const verticalRange = getProjectedRange(corners, vertical);
-            const depthRange = getProjectedRange(corners, depth);
+            const axes = [horizontal, vertical, depth];
+            let [horizontalRange, verticalRange, depthRange] = getProjectedGeometryRanges(boundsWrapper, axes) || [];
+
+            if (!horizontalRange || !verticalRange || !depthRange) {
+                const box = new THREE.Box3().setFromObject(boundsWrapper);
+                if (box.isEmpty()) return null;
+                const corners = getBoxCorners(box);
+                horizontalRange = getProjectedRange(corners, horizontal);
+                verticalRange = getProjectedRange(corners, vertical);
+                depthRange = getProjectedRange(corners, depth);
+            }
 
             return {
                 widthUnits: Math.max(Math.abs(horizontalRange.min), Math.abs(horizontalRange.max)) * 2,
@@ -1758,7 +1841,7 @@
 
             if (cropEnabled && cropBox) updateCropPlanes();
             const axis = getSliceAxisDefinition().vector;
-            const center = finiteNumber(document.getElementById('slice-slider')?.value, modelBounds.min);
+            const center = getOffsetSliceValue(finiteNumber(document.getElementById('slice-slider')?.value, modelBounds.min));
             const half = Math.max(0, sliceThickness) / 2;
             const minSlice = center - half;
             const maxSlice = center + half;
@@ -4058,7 +4141,7 @@
             const visible = document.getElementById('show-frame').checked && !isProcessingVideo;
             const metrics = getDisplayVolumeMetrics();
             frameHelper.scale.set(metrics.displayWidthUnits, metrics.displayHeightUnits, 1);
-            setObjectSlicePosition(frameHelper, finiteNumber(document.getElementById('slice-slider').value, 0));
+            setObjectSlicePosition(frameHelper, getOffsetSliceValue(document.getElementById('slice-slider').value));
             frameHelper.visible = visible;
 
             if (displayVolumeHelper) {
@@ -4109,7 +4192,9 @@
             const totalFrames = getTotalExportFrames(settings);
             const timeSeconds = index / settings.fps;
             const progress = totalFrames === 1 ? 0 : index / (totalFrames - 1);
+            const offsetUnits = (settings.sequence?.display_offset_cm || 0) / Math.max(0.000001, settings.sequence?.cm_per_model_unit || 1);
             const sliceValueModelUnits = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
+            const effectiveSliceValueModelUnits = sliceValueModelUnits + offsetUnits;
             const physicalStartMm = (settings.sequence?.start_cm || 0) * 10;
             const physicalVolumeMm = (settings.sequence?.volume_height_cm || 0) * 10;
             return {
@@ -4118,14 +4203,16 @@
                 sweepProgress: progress,
                 sliceProgress: progress,
                 sliceValueModelUnits,
-                physicalPositionMm: physicalStartMm + physicalVolumeMm * progress
+                effectiveSliceValueModelUnits,
+                physicalPositionMm: physicalStartMm + physicalVolumeMm * progress + (settings.sequence?.display_offset_cm || 0) * 10
             };
         }
 
         function sequenceJsonBlob(settings) {
             return new Blob([JSON.stringify({
                 volume_height_cm: settings.sequence.volume_height_cm,
-                start_cm: settings.sequence.start_cm
+                start_cm: settings.sequence.start_cm,
+                display_offset_cm: settings.sequence.display_offset_cm
             }, null, 2)], { type: 'application/json' });
         }
 
@@ -4254,7 +4341,7 @@
                 sliceThickness = settings.sliceThicknessModelUnits;
                 setSliceWindowUniforms(
                     settings.sliceThicknessMode === 'frame-pitch',
-                    frameInfo.sliceValueModelUnits,
+                    frameInfo.effectiveSliceValueModelUnits,
                     settings.sliceThicknessModelUnits
                 );
             } else {
@@ -4547,14 +4634,15 @@
         function updatePlaneHeight(val) {
             const fallback = finiteNumber(document.getElementById('slice-slider').value, 0);
             const v = clamp(finiteNumber(val, fallback), modelBounds.min, modelBounds.max);
+            const displayV = getOffsetSliceValue(v);
             // Mesh Slice
-            clippingPlane.constant = v;
-            setObjectSlicePosition(capMesh, v);
+            clippingPlane.constant = displayV;
+            setObjectSlicePosition(capMesh, displayV);
             
             // Point Slab
             const half = sliceThickness / 2;
-            slabPlaneBottom.constant = -v + half;
-            slabPlaneTop.constant = v + half;
+            slabPlaneBottom.constant = -displayV + half;
+            slabPlaneTop.constant = displayV + half;
             
             if(!isProcessingVideo) {
                 const slider = document.getElementById('slice-slider');
@@ -4563,6 +4651,58 @@
                 if (document.activeElement !== input) input.value = v.toFixed(2);
                 if (!isAnimate) markInfoExactCountsStale();
             }
+        }
+
+        function updateOrthoViewButtonsVisibility() {
+            const buttons = document.getElementById('ortho-view-buttons');
+            if (!buttons) return;
+            buttons.classList.toggle('hidden', !(viewMode === '3d' && isOrtho3D));
+        }
+
+        function getCurrentModelViewTarget() {
+            const target = controls ? controls.target.clone() : new THREE.Vector3();
+            const wrapper = getBoundsWrapper();
+            if (!wrapper) return target;
+
+            wrapper.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(wrapper);
+            if (!box.isEmpty()) box.getCenter(target);
+            return target;
+        }
+
+        function getPresetViewDistance(target) {
+            let distance = activeCamera ? activeCamera.position.distanceTo(target) : 5;
+            const wrapper = getBoundsWrapper();
+            if (wrapper) {
+                wrapper.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(wrapper);
+                if (!box.isEmpty()) {
+                    const sphere = new THREE.Sphere();
+                    box.getBoundingSphere(sphere);
+                    distance = Math.max(distance, sphere.radius * 2.5);
+                }
+            }
+            return clamp(distance, 4, 50);
+        }
+
+        function setOrthoPresetView(view) {
+            if (viewMode !== '3d' || !isOrtho3D || !orthoCamera3D || !controls) return;
+            const target = getCurrentModelViewTarget();
+            const distance = getPresetViewDistance(target);
+            const direction = view === 'side'
+                ? new THREE.Vector3(1, 0, 0)
+                : new THREE.Vector3(0, 0, 1);
+
+            activeCamera = orthoCamera3D;
+            controls.object = activeCamera;
+            controls.target.copy(target);
+            activeCamera.position.copy(target).addScaledVector(direction, distance);
+            activeCamera.up.set(0, 1, 0);
+            activeCamera.lookAt(target);
+            activeCamera.updateProjectionMatrix();
+            controls.update();
+            updateCropHelperVisibility();
+            updateModelTransformVisibility();
         }
 
         function setupUI() {
@@ -4577,6 +4717,8 @@
             document.getElementById('slice-axis').addEventListener('change', (e) => setSliceAxis(e.target.value));
             document.getElementById('btn-3d').addEventListener('click', () => setMode('3d'));
             document.getElementById('btn-2d').addEventListener('click', () => setMode('2d'));
+            document.getElementById('btn-front-view').addEventListener('click', () => setOrthoPresetView('front'));
+            document.getElementById('btn-side-view').addEventListener('click', () => setOrthoPresetView('side'));
             document.getElementById('btn-export').addEventListener('click', startExport);
             document.getElementById('btn-info-refresh').addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -4593,7 +4735,7 @@
             };
             document.getElementById('export-duration').addEventListener('input', refreshAutoThickness);
             document.getElementById('export-fps').addEventListener('change', refreshAutoThickness);
-            ['display-width-mm', 'display-height-mm', 'display-travel-mm', 'display-placement'].forEach((id) => {
+            ['display-width-mm', 'display-height-mm', 'display-travel-mm', 'display-offset-mm', 'display-placement'].forEach((id) => {
                 document.getElementById(id).addEventListener('input', syncSequencePreview);
                 document.getElementById(id).addEventListener('change', syncSequencePreview);
             });
@@ -4737,6 +4879,7 @@
             setCropEnabled(cropEnabled);
             refreshSliceThicknessFromMode();
             updateSliceControlVisibility();
+            updateOrthoViewButtonsVisibility();
             syncSequencePreview();
             markInfoExactCountsStale();
         }
@@ -4792,6 +4935,7 @@
                     visualGroup.visible = false; 
                 }
             }
+            updateOrthoViewButtonsVisibility();
             updateSliceControlVisibility();
             updateCropHelperVisibility();
             updateModelTransformVisibility();
@@ -4799,6 +4943,7 @@
         
         window.toggle3DProjection = function(isOrtho) {
             isOrtho3D = isOrtho;
+            updateOrthoViewButtonsVisibility();
             if (viewMode !== '3d') return; 
 
             const target = controls.target.clone();
@@ -4836,6 +4981,7 @@
             
             controls.object = activeCamera;
             controls.update();
+            updateOrthoViewButtonsVisibility();
             updateCropHelperVisibility();
             updateModelTransformVisibility();
         }
