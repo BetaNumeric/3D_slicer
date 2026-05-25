@@ -2230,8 +2230,8 @@
 
             // 6. Controls
             controls = new THREE.OrbitControls(activeCamera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
+            controls.enableDamping = false;
+            controls.dampingFactor = 0.00;
 
             // 7. Lights
             scene.add(new THREE.AmbientLight(0xffffff, 0.6));
