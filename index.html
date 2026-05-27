@@ -2661,6 +2661,54 @@
         };
         
         // --- SAMPLER UTILS ---
+        function allocateMeshSampleCounts(parts, totalPoints) {
+            const budget = Math.max(0, Math.floor(totalPoints));
+            if (!parts.length || budget <= 0) return [];
+
+            const counts = parts.map(() => 0);
+            const weights = parts.map((part) => Math.max(0, part.area));
+            const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+            if (totalWeight <= 0) {
+                return parts.map((part, index) => ({ ...part, count: counts[index] }));
+            }
+
+            const remainders = [];
+            let assigned = 0;
+            weights.forEach((weight, index) => {
+                const exact = (budget * weight) / totalWeight;
+                const whole = Math.floor(exact);
+                counts[index] += whole;
+                assigned += whole;
+                remainders.push({ index, fraction: exact - whole });
+            });
+
+            let remaining = budget - assigned;
+            remainders.sort((a, b) => b.fraction - a.fraction);
+            for (let i = 0; i < remaining; i++) {
+                counts[remainders[i % remainders.length].index]++;
+            }
+
+            if (budget >= parts.length) {
+                counts.forEach((count, index) => {
+                    if (count > 0 || weights[index] <= 0) return;
+                    let donorIndex = -1;
+                    let donorCount = 1;
+                    counts.forEach((candidateCount, candidateIndex) => {
+                        if (candidateCount > donorCount) {
+                            donorCount = candidateCount;
+                            donorIndex = candidateIndex;
+                        }
+                    });
+                    if (donorIndex >= 0) {
+                        counts[donorIndex]--;
+                        counts[index]++;
+                    }
+                });
+            }
+
+            return parts.map((part, index) => ({ ...part, count: counts[index] }));
+        }
+
         function createSamplingGeometry(mesh, count) {
             const geom = mesh.geometry;
             const posAttr = geom.attributes.position;
@@ -2675,8 +2723,10 @@
             const areas = new Float32Array(faces);
             let totalArea = 0;
             const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+            const wa = new THREE.Vector3(), wb = new THREE.Vector3(), wc = new THREE.Vector3();
             const ab = new THREE.Vector3(), ac = new THREE.Vector3();
             const vertexIndex = (offset) => indexAttr ? indexAttr.getX(offset) : offset;
+            const worldMatrix = mesh.matrixWorld;
             
             for(let i=0; i<faces; i++) {
                 const i3 = i*3;
@@ -2688,8 +2738,11 @@
                 vb.fromBufferAttribute(posAttr, b);
                 vc.fromBufferAttribute(posAttr, c);
                 
-                ab.subVectors(vb, va);
-                ac.subVectors(vc, va);
+                wa.copy(va).applyMatrix4(worldMatrix);
+                wb.copy(vb).applyMatrix4(worldMatrix);
+                wc.copy(vc).applyMatrix4(worldMatrix);
+                ab.subVectors(wb, wa);
+                ac.subVectors(wc, wa);
                 const area = ab.cross(ac).length() * 0.5;
                 areas[i] = area;
                 totalArea += area;
@@ -3748,15 +3801,20 @@
                 const pos = mesh.geometry.attributes.position;
                 let a = 0;
                 const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+                const wa = new THREE.Vector3(), wb = new THREE.Vector3(), wc = new THREE.Vector3();
                 const ab = new THREE.Vector3(), ac = new THREE.Vector3();
                 const total = Math.floor((idx ? idx.count : pos.count) / 3) * 3;
                 const vertexIndex = (offset) => idx ? idx.getX(offset) : offset;
+                const worldMatrix = mesh.matrixWorld;
                 for(let i=0; i<total; i+=3) {
                     va.fromBufferAttribute(pos, vertexIndex(i));
                     vb.fromBufferAttribute(pos, vertexIndex(i+1));
                     vc.fromBufferAttribute(pos, vertexIndex(i+2));
-                    ab.subVectors(vb, va);
-                    ac.subVectors(vc, va);
+                    wa.copy(va).applyMatrix4(worldMatrix);
+                    wb.copy(vb).applyMatrix4(worldMatrix);
+                    wc.copy(vc).applyMatrix4(worldMatrix);
+                    ab.subVectors(wb, wa);
+                    ac.subVectors(wc, wa);
                     a += ab.cross(ac).length() * 0.5;
                 }
                 return a;
@@ -3765,6 +3823,7 @@
             const pointRoot = root.clone();
             let cloneTotalArea = 0;
             const cloneList = [];
+            pointRoot.updateMatrixWorld(true);
 
             pointRoot.traverse(o => {
                 if(o.isMesh && o.geometry) {
@@ -3777,9 +3836,8 @@
             });
 
             if (cloneTotalArea > 0) {
-                cloneList.forEach(item => {
-                    const ratio = item.area / cloneTotalArea;
-                    const count = Math.floor(MAX_POINTS * ratio);
+                allocateMeshSampleCounts(cloneList, MAX_POINTS).forEach(item => {
+                    const count = item.count;
                     if(count > 0) {
                         const sourceMaterial = Array.isArray(item.obj.material) ? item.obj.material[0] : item.obj.material;
                         const sampledGeo = createSamplingGeometry(item.obj, count);
