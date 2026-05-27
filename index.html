@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Slicer & Exporter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
@@ -3351,8 +3352,18 @@
             return 'auto';
         }
 
+        function createGltfLoader() {
+            const loader = new THREE.GLTFLoader();
+            if (THREE.DRACOLoader) {
+                const dracoLoader = new THREE.DRACOLoader();
+                dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/gltf/');
+                loader.setDRACOLoader(dracoLoader);
+            }
+            return loader;
+        }
+
         function createImportLoader(extension) {
-            if (extension === 'glb' || extension === 'gltf') return new THREE.GLTFLoader();
+            if (extension === 'glb' || extension === 'gltf') return createGltfLoader();
             if (extension === 'obj') return new THREE.OBJLoader();
             if (extension === 'stl') return new THREE.STLLoader();
             if (extension === 'ply') return createPlyLoader();
