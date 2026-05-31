@@ -4231,7 +4231,23 @@
             document.getElementById('export-button-label').textContent = label;
         }
 
+        function getSequenceTravelRatio(sequence) {
+            const travelCm = Math.max(0, finiteNumber(sequence?.travel_cm, 0));
+            const volumeCm = Math.max(0, finiteNumber(sequence?.volume_height_cm, 0));
+            if (travelCm <= 0) return volumeCm > 0 ? 1 : 0;
+            return clamp(volumeCm / travelCm, 0, 1);
+        }
+
+        function getSequenceFrameCount(fps, fullTravelDuration, sequence, modelSpanUnits = 0) {
+            const fullTravelFrames = Math.max(1, Math.round(fps * fullTravelDuration));
+            const activeTravelRatio = getSequenceTravelRatio(sequence);
+            const minFrames = modelSpanUnits > 0 ? 2 : 1;
+            if (activeTravelRatio <= 0) return minFrames;
+            return Math.max(minFrames, Math.round(fullTravelFrames * activeTravelRatio));
+        }
+
         function getTotalExportFrames(settings) {
+            if (Number.isFinite(settings?.frameCount)) return Math.max(1, Math.round(settings.frameCount));
             return Math.max(1, Math.round(settings.fps * settings.duration));
         }
 
@@ -4254,7 +4270,7 @@
         function estimateExportBytes(settings) {
             const frames = getTotalExportFrames(settings);
             if (settings.format === 'png-sequence') return settings.width * settings.height * 4 * frames;
-            return Math.max(0, (settings.estimatedBitrate || 0) * settings.duration / 8);
+            return Math.max(0, (settings.estimatedBitrate || 0) * (frames / Math.max(1, settings.fps)) / 8);
         }
 
         function getExportFrameInfo(index, settings) {
@@ -4279,9 +4295,8 @@
 
         function sequenceJsonBlob(settings) {
             return new Blob([JSON.stringify({
-                volume_height_cm: settings.sequence.volume_height_cm,
                 start_cm: settings.sequence.start_cm,
-                display_offset_cm: settings.sequence.display_offset_cm
+                height_cm: settings.sequence.volume_height_cm
             }, null, 2)], { type: 'application/json' });
         }
 
@@ -4301,6 +4316,7 @@
                 width,
                 height,
                 duration,
+                fullTravelDuration: duration,
                 fps,
                 sliceMode: document.getElementById('export-slice-mode').value,
                 renderStyle: resolved.renderStyle,
@@ -4310,6 +4326,9 @@
                 exportBaseName: currentModelBaseName || 'model',
                 estimatedBitrate
             };
+            settings.modelSpanUnits = Math.max(0, modelBounds.max - modelBounds.min);
+            settings.frameCount = getSequenceFrameCount(settings.fps, settings.fullTravelDuration, settings.sequence, settings.modelSpanUnits);
+            settings.activeDuration = settings.frameCount / settings.fps;
             settings.framePitchModelUnits = getPitchMatchedSliceThickness(settings);
             settings.sliceThicknessModelUnits = resolveSliceThicknessForSettings(settings);
             if (settings.sequence.volume_height_cm > settings.sequence.travel_cm) {
