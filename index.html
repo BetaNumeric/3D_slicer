@@ -371,12 +371,22 @@
                             <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
                          </label>
 
-                         <div class="flex flex-col gap-2">
-                            <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
-                            <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
-                                <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
+                         <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Fill</label>
+                                <select id="slice-fill-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none">
+                                    <option value="solid" selected>Solid Color</option>
+                                    <option value="mesh">Mesh Color</option>
+                                </select>
+                            </div>
+                            <div id="slice-color-control">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
+                                <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
+                                    <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
+                                </div>
                             </div>
                          </div>
+
                      </div>
                      
                      <!-- Point Options -->
@@ -577,6 +587,8 @@
         let outlineMode = false;
         let outlineWidth = 2.0; 
         let sliceColor = new THREE.Color(0xffffff);
+        let sliceFillMode = 'solid';
+        let meshSliceFillEntries = [];
         
         // Point Settings
         let pointSize = DEFAULT_POINT_SIZE;
@@ -2131,6 +2143,50 @@
             renderTarget = null;
         }
 
+        function getMaterialSliceColor(material) {
+            const materials = Array.isArray(material) ? material : [material];
+            const color = new THREE.Color(0, 0, 0);
+            let count = 0;
+
+            materials.forEach((mat) => {
+                if (mat?.color?.isColor) {
+                    color.r += mat.color.r;
+                    color.g += mat.color.g;
+                    color.b += mat.color.b;
+                    count++;
+                }
+            });
+
+            if (count <= 0) return new THREE.Color(0xffffff);
+            return color.multiplyScalar(1 / count);
+        }
+
+        function collectMeshes(root) {
+            const meshes = [];
+            root?.traverse((node) => {
+                if (node.isMesh) meshes.push(node);
+            });
+            return meshes;
+        }
+
+        function createMeshSliceFillEntries(sourceRoot, backRoot, frontRoot) {
+            const sourceMeshes = collectMeshes(sourceRoot);
+            const backMeshes = collectMeshes(backRoot);
+            const frontMeshes = collectMeshes(frontRoot);
+            const count = Math.min(sourceMeshes.length, backMeshes.length, frontMeshes.length);
+            const entries = [];
+
+            for (let i = 0; i < count; i++) {
+                entries.push({
+                    back: backMeshes[i],
+                    front: frontMeshes[i],
+                    color: getMaterialSliceColor(sourceMeshes[i].material)
+                });
+            }
+
+            return entries;
+        }
+
         // --- INIT ---
         function init() {
             const container = document.getElementById('canvas-container');
@@ -2184,7 +2240,8 @@
                     uResolution: { value: new THREE.Vector2(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio) },
                     uColor: { value: sliceColor },
                     uOutlineWidth: { value: outlineWidth },
-                    uIsOutline: { value: 0 } 
+                    uIsOutline: { value: 0 },
+                    uUseTextureColor: { value: 0 }
                 },
                 vertexShader: `
                     varying vec2 vUv;
@@ -2199,12 +2256,13 @@
                     uniform vec3 uColor;
                     uniform float uOutlineWidth;
                     uniform float uIsOutline;
+                    uniform float uUseTextureColor;
                     varying vec2 vUv;
 
                     void main() {
                         vec4 center = texture2D(tDiffuse, vUv);
                         if (uIsOutline < 0.5) {
-                            if (center.a > 0.0) gl_FragColor = vec4(uColor, 1.0);
+                            if (center.a > 0.0) gl_FragColor = vec4(uUseTextureColor > 0.5 ? center.rgb : uColor, 1.0);
                             else discard;
                             return;
                         }
@@ -2390,9 +2448,52 @@
             }
         }
 
-        function performMultiPassRender() {
+        function setMeshSliceFillEntriesVisible(visible) {
+            meshSliceFillEntries.forEach((entry) => {
+                if (entry.back) entry.back.visible = visible;
+                if (entry.front) entry.front.visible = visible;
+            });
+        }
+
+        function renderMeshColorCapTarget() {
+            const entries = meshSliceFillEntries.filter((entry) => entry.back && entry.front);
+            const previousAutoClear = renderer.autoClear;
+            const previousCapColor = capMaterial.color.clone();
+            const previousVisibility = entries.map((entry) => ({
+                back: entry.back.visible,
+                front: entry.front.visible
+            }));
+
+            renderer.setRenderTarget(renderTarget);
+            renderer.autoClear = true;
+            renderer.clear(true, true, true);
+            renderer.autoClear = false;
+            setMeshSliceFillEntriesVisible(false);
+
+            try {
+                entries.forEach((entry) => {
+                    renderer.clear(false, true, true);
+                    entry.back.visible = true;
+                    entry.front.visible = true;
+                    capMaterial.color.copy(entry.color);
+                    renderer.render(scene, activeCamera);
+                    entry.back.visible = false;
+                    entry.front.visible = false;
+                });
+            } finally {
+                entries.forEach((entry, index) => {
+                    entry.back.visible = previousVisibility[index].back;
+                    entry.front.visible = previousVisibility[index].front;
+                });
+                capMaterial.color.copy(previousCapColor);
+                renderer.autoClear = previousAutoClear;
+            }
+        }
+
+        function performMultiPassRender(fillMode = sliceFillMode) {
             const currentBg = scene.background;
             const visVisible = visualGroup.visible;
+            const useMeshFillColors = fillMode === 'mesh' && meshSliceFillEntries.length > 0 && !outlineMode;
             
             scene.background = null; 
             visualGroup.visible = false; 
@@ -2403,9 +2504,13 @@
             pointGroup.visible = false; 
             gaussianGroup.visible = false;
 
-            renderer.setRenderTarget(renderTarget);
-            renderer.clear();
-            renderer.render(scene, activeCamera);
+            if (useMeshFillColors) {
+                renderMeshColorCapTarget();
+            } else {
+                renderer.setRenderTarget(renderTarget);
+                renderer.clear();
+                renderer.render(scene, activeCamera);
+            }
             
             renderer.setRenderTarget(null);
             scene.background = currentBg;
@@ -2422,6 +2527,7 @@
 
             postMaterial.uniforms.tDiffuse.value = renderTarget.texture;
             postMaterial.uniforms.uIsOutline.value = outlineMode ? 1 : 0;
+            postMaterial.uniforms.uUseTextureColor.value = useMeshFillColors ? 1 : 0;
             
             renderer.autoClear = false;
             renderer.render(postScene, postCamera);
@@ -3782,6 +3888,7 @@
             const frontRoot = root.clone();
             frontWrapper.add(frontRoot);
             setWrapperBaseScale(frontWrapper, scale);
+            meshSliceFillEntries = createMeshSliceFillEntries(root, backRoot, frontRoot);
 
             const pointWrapper = new THREE.Group();
             pointWrapper.position.copy(visWrapper.position);
@@ -3949,6 +4056,7 @@
                 pointMaterials = [];
                 gaussianMaterials = [];
                 activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
+                meshSliceFillEntries = [];
                 cropBoxInitialized = false;
 
                 const imported = normalizeImportedAsset(asset, extension, getImportMode());
@@ -4142,6 +4250,19 @@
             const settings = document.getElementById('outline-settings');
             if(isOutline) settings.classList.remove('hidden');
             else settings.classList.add('hidden');
+            updateSliceFillModeUI();
+        }
+
+        function updateSliceFillModeUI() {
+            const select = document.getElementById('slice-fill-mode');
+            const colorControl = document.getElementById('slice-color-control');
+            if (select) select.value = sliceFillMode;
+            if (colorControl) colorControl.classList.toggle('opacity-50', sliceFillMode === 'mesh' && !outlineMode);
+        }
+
+        window.setSliceFillMode = function(mode) {
+            sliceFillMode = mode === 'mesh' ? 'mesh' : 'solid';
+            updateSliceFillModeUI();
         }
         
         window.setRenderStyle = function(style) {
@@ -4323,6 +4444,7 @@
                 warnings: resolved.warnings,
                 sequence,
                 sliceThicknessMode: thicknessMode,
+                sliceFillMode,
                 exportBaseName: currentModelBaseName || 'model',
                 estimatedBitrate
             };
@@ -4438,7 +4560,7 @@
             updatePlaneHeight(frameInfo.sliceValueModelUnits);
 
             if (settings.renderStyle === 'mesh') {
-                performMultiPassRender();
+                performMultiPassRender(settings.sliceFillMode);
             } else {
                 if (settings.renderStyle === 'gaussian') updateGaussianDepthSorting(true);
                 renderPointExportFrame();
@@ -4882,6 +5004,7 @@
                 postMaterial.uniforms.uOutlineWidth.value = outlineWidth;
                 document.getElementById('outline-val').textContent = outlineWidth.toFixed(0) + ' px';
             });
+            document.getElementById('slice-fill-mode').addEventListener('change', (e) => setSliceFillMode(e.target.value));
             
             // Point UI
             document.getElementById('point-size').addEventListener('input', (e) => {
@@ -4968,6 +5091,7 @@
             refreshSliceThicknessFromMode();
             updateSliceControlVisibility();
             updateOrthoViewButtonsVisibility();
+            updateSliceFillModeUI();
             syncSequencePreview();
             markInfoExactCountsStale();
         }
@@ -5077,6 +5201,7 @@
         window.setCapColor = function(hexStr) {
             sliceColor.set(hexStr);
             postMaterial.uniforms.uColor.value.set(hexStr);
+            if (capMaterial) capMaterial.color.set(hexStr);
         }
         
         window.togglePanel = function() {
