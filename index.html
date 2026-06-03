@@ -44,23 +44,29 @@
 
     <!-- UI Container -->
     <div class="absolute top-4 left-4 z-20 w-80 flex flex-col items-start pointer-events-none">
+        <button id="panel-open-btn" type="button" onclick="openSettingsPanel()" class="hidden pointer-events-auto p-2 bg-gray-900/90 hover:bg-gray-800 border border-gray-800 rounded-lg shadow-2xl text-gray-300 hover:text-white transition-colors" aria-label="Open settings">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        </button>
         
         <!-- Main Panel -->
         <div id="controls-panel" class="bg-gray-900/90 backdrop-blur-md rounded-xl shadow-2xl border border-gray-800 pointer-events-auto overflow-hidden transition-all duration-300 w-full">
             
             <!-- Header -->
-            <div class="flex items-center justify-between px-3 py-2 bg-black/40 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50" onclick="togglePanel()">
+            <div class="flex items-center justify-between px-3 py-2 bg-black/40 border-b border-gray-800">
                 <div class="flex items-center gap-2">
                     <h1 class="text-xs font-bold text-gray-100 tracking-wide">3D Slicer</h1>
                 </div>
-                <button id="minimize-btn" class="text-gray-400 hover:text-white transition-transform transform rotate-0">
+                <button id="panel-close-btn" type="button" onclick="closeSettingsPanel()" class="text-gray-400 hover:text-white transition-colors" aria-label="Close settings">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
             </div>
 
-            <!-- Always-visible view controls -->
+            <!-- View -->
             <div id="persistent-controls" class="p-2 space-y-2 bg-black/25 border-b border-gray-800">
                 <div class="bg-black/30 p-1 rounded border border-gray-800">
                     <div class="grid grid-cols-[1fr_1fr_auto] gap-1">
@@ -77,12 +83,17 @@
                     </div>
                 </div>
 
-                <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/50 border border-gray-800 rounded px-2 py-1.5">
-                    <span>Show Full Point Cloud</span>
-                    <input type="checkbox" id="show-full-cloud" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
-                </label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/50 border border-gray-800 rounded px-2 py-1.5">
+                        <span>Full Model</span>
+                        <input type="checkbox" id="show-full-cloud" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                    </label>
+                    <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-900/50 border border-gray-800 rounded px-2 py-1.5">
+                        <span>Display Volume</span>
+                        <input type="checkbox" id="show-frame" class="w-3 h-3 accent-red-500 rounded bg-gray-700 border-gray-600">
+                    </label>
+                </div>
 
-                <!-- Slice Control -->
                 <div id="slice-control" class="space-y-2">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-2">
@@ -100,143 +111,215 @@
             </div>
 
             <!-- Content -->
-            <div id="panel-content" class="p-4 space-y-4 max-h-[calc(100vh-18rem)] overflow-y-auto">
+            <div id="panel-content" class="p-3 space-y-3 max-h-[calc(100vh-18rem)] overflow-y-auto">
 
-                <!-- Transform & Crop Controls -->
-                <div class="space-y-2">
-                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="document.getElementById('transform-crop-controls').classList.toggle('hidden');">
-                         <label class="text-[10px] text-gray-500 uppercase font-bold hover:text-gray-300 transition-colors">Transform & Crop</label>
-                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                <!-- Model -->
+                <div class="space-y-3 pb-3 border-b border-gray-800">
+                    <label class="text-xs font-bold uppercase text-gray-500 block">Model</label>
+
+                    <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
+                        <button id="style-mesh" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('mesh')">Solid Mesh</button>
+                        <button id="style-points" class="text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('points')">Point Cloud</button>
+                        <button id="style-gaussian" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('gaussian')">Gaussian</button>
                     </div>
-                    <div id="transform-crop-controls" class="space-y-4 hidden pt-1">
-                        <div class="space-y-2">
-                            <label class="text-[10px] text-gray-500 uppercase font-bold block">Model Orientation</label>
+
+                    <div id="mesh-options" class="hidden space-y-3">
+                        <div id="outline-controls" class="bg-gray-800/50 p-2 rounded border border-gray-700 space-y-2">
                             <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                                <span>Flip Vertical</span>
-                                <input type="checkbox" id="flip-model" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                                <span>Outline Only</span>
+                                <input type="checkbox" id="outline-mode" class="w-3 h-3 accent-purple-500 rounded bg-gray-700 border-gray-600">
                             </label>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-red-500 w-3">X</span>
-                                <input type="range" id="rot-x" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
-                                <input type="number" id="num-rot-x" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
-                                <input type="range" id="rot-y" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
-                                <input type="number" id="num-rot-y" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
-                                <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                                <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-gray-500 w-3">S</span>
-                                <input type="range" id="model-scale" min="0.05" max="5" step="0.001" value="1" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                                <input type="number" id="num-model-scale" min="0.05" max="5" step="0.001" value="1.000" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-amber-500 transition-colors">
-                            </div>
-                            <div>
-                                <div class="flex items-center justify-between mb-1">
-                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Viewport Handles</label>
-                                    <label class="flex items-center gap-1 text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                                        <span>Show</span>
-                                        <input type="checkbox" id="model-handles-enabled" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
-                                    </label>
+                            <div id="outline-settings" class="hidden space-y-1">
+                                <div class="flex justify-between">
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Thickness</label>
+                                    <span id="outline-val" class="text-[10px] text-purple-400 font-mono">2 px</span>
                                 </div>
-                                <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
-                                    <button type="button" id="model-mode-move" class="text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow">Move</button>
-                                    <button type="button" id="model-mode-rotate" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Rotate</button>
-                                    <button type="button" id="model-mode-scale" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Scale</button>
-                                </div>
+                                <input type="range" id="outline-width" min="1" max="10" step="1" value="2" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
                             </div>
                         </div>
 
-                        <!-- Translation -->
-                        <div class="space-y-2 pt-3 border-t border-gray-800">
-                            <label class="text-[10px] text-gray-500 uppercase font-bold block">Model Position</label>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-red-500 w-3">X</span>
-                                <input type="range" id="pos-model-x" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
-                                <input type="number" id="num-pos-model-x" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
+                        <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                            <span>Show 3D Mesh</span>
+                            <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
+                        </label>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Fill</label>
+                                <select id="slice-fill-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none">
+                                    <option value="solid" selected>Solid Color</option>
+                                    <option value="mesh">Mesh Color</option>
+                                </select>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
-                                <input type="range" id="pos-model-y" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
-                                <input type="number" id="num-pos-model-y" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
-                                <input type="range" id="pos-model-z" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                                <input type="number" id="num-pos-model-z" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
-                            </div>
-                            <div class="flex gap-2 min-w-0 w-full mt-1">
-                                <button onclick="centerModel()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Center</button>
-                                <button onclick="resetModelTransform()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Reset</button>
+                            <div id="slice-color-control">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
+                                <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
+                                    <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="space-y-3 pt-3 border-t border-gray-800">
-                            <label class="text-[10px] text-gray-500 uppercase font-bold block">Crop Cuboid</label>
-                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                                <span>Enable Crop</span>
-                                <input type="checkbox" id="crop-enabled" class="w-3 h-3 accent-cyan-500 rounded bg-gray-700 border-gray-600">
-                            </label>
-                            <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Viewport Handles</label>
-                                <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
-                                    <button type="button" id="crop-mode-move" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Move</button>
-                                    <button type="button" id="crop-mode-scale" class="text-[10px] font-bold py-1 rounded bg-cyan-600 text-white transition-colors shadow">Scale</button>
-                                    <button type="button" id="crop-mode-rotate" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Rotate</button>
+                    <div id="point-options" class="space-y-3">
+                        <div>
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point / Splat Size</label>
+                                <input type="number" id="point-size-val" min="0.001" max="1.0" step="0.0001" value="0.0100" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
+                            </div>
+                            <input type="range" id="point-size" min="0" max="1" step="0.001" value="0.333" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        </div>
+                        <div>
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Preview Density</label>
+                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">10%</span>
+                            </div>
+                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        </div>
+                        <div>
+                            <div class="flex justify-between">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Thickness</label>
+                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.010</span>
+                            </div>
+                            <select id="slice-thickness-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none mb-2">
+                                <option value="frame-pitch" selected>Frame Pitch</option>
+                                <option value="manual">Manual</option>
+                            </select>
+                            <input type="range" id="point-thick" min="0.00005" max="0.2" step="0.00005" value="0.010" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-1">
+                        <div class="flex justify-between items-center cursor-pointer select-none" onclick="document.getElementById('transform-crop-controls').classList.toggle('hidden');">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold hover:text-gray-300 transition-colors">Advanced Model</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                        <div id="transform-crop-controls" class="space-y-4 hidden pt-1">
+                            <div class="space-y-2">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold block">Transform</label>
+                                <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                    <span>Flip Vertical</span>
+                                    <input type="checkbox" id="flip-model" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-red-500 w-3">X</span>
+                                    <input type="range" id="rot-x" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
+                                    <input type="number" id="num-rot-x" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
+                                    <input type="range" id="rot-y" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                                    <input type="number" id="num-rot-y" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
+                                    <input type="range" id="rot-z" min="0" max="360" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                                    <input type="number" id="num-rot-z" min="0" max="360" value="0" class="w-10 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-gray-500 w-3">S</span>
+                                    <input type="range" id="model-scale" min="0.05" max="5" step="0.001" value="1" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                                    <input type="number" id="num-model-scale" min="0.05" max="5" step="0.001" value="1.000" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-amber-500 transition-colors">
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="text-[10px] text-gray-500 uppercase font-bold">Viewport Handles</label>
+                                        <label class="flex items-center gap-1 text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                            <span>Show</span>
+                                            <input type="checkbox" id="model-handles-enabled" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                                        </label>
+                                    </div>
+                                    <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
+                                        <button type="button" id="model-mode-move" class="text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow">Move</button>
+                                        <button type="button" id="model-mode-rotate" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Rotate</button>
+                                        <button type="button" id="model-mode-scale" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Scale</button>
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <div class="flex justify-between items-center mb-1">
-                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Position</label>
-                                    <button type="button" id="crop-fit" class="text-[10px] text-cyan-400 hover:text-cyan-200 font-bold">Fit</button>
+
+                            <div class="space-y-2 pt-3 border-t border-gray-800">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold block">Position</label>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-red-500 w-3">X</span>
+                                    <input type="range" id="pos-model-x" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
+                                    <input type="number" id="num-pos-model-x" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-red-500 transition-colors">
                                 </div>
-                                <div class="grid grid-cols-3 gap-2">
-                                    <input type="number" id="crop-pos-x" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop position X">
-                                    <input type="number" id="crop-pos-y" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop position Y">
-                                    <input type="number" id="crop-pos-z" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop position Z">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-green-500 w-3">Y</span>
+                                    <input type="range" id="pos-model-y" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                                    <input type="number" id="num-pos-model-y" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-green-500 transition-colors">
                                 </div>
-                            </div>
-                            <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Size</label>
-                                <div class="grid grid-cols-3 gap-2">
-                                    <input type="number" id="crop-size-x" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop size X">
-                                    <input type="number" id="crop-size-y" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop size Y">
-                                    <input type="number" id="crop-size-z" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop size Z">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-blue-500 w-3">Z</span>
+                                    <input type="range" id="pos-model-z" min="-5" max="5" step="0.01" value="0" class="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                                    <input type="number" id="num-pos-model-z" step="0.01" value="0" class="w-12 bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-600 outline-none text-right focus:border-blue-500 transition-colors">
                                 </div>
-                            </div>
-                            <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Rotation</label>
-                                <div class="grid grid-cols-3 gap-2">
-                                    <input type="number" id="crop-rot-x" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop rotation X">
-                                    <input type="number" id="crop-rot-y" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop rotation Y">
-                                    <input type="number" id="crop-rot-z" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop rotation Z">
+                                <div class="flex gap-2 min-w-0 w-full mt-1">
+                                    <button onclick="centerModel()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Center</button>
+                                    <button onclick="resetModelTransform()" class="flex-1 min-w-0 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded py-1 transition-colors">Reset</button>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button type="button" id="crop-apply" class="py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold rounded transition-colors">Apply Crop</button>
-                                <button type="button" id="crop-export-ply" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-100 text-[10px] font-bold rounded border border-cyan-900/60 transition-colors">Export PLY</button>
+
+                            <div class="space-y-3 pt-3 border-t border-gray-800">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold block">Crop Cuboid</label>
+                                <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
+                                    <span>Enable Crop</span>
+                                    <input type="checkbox" id="crop-enabled" class="w-3 h-3 accent-cyan-500 rounded bg-gray-700 border-gray-600">
+                                </label>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Viewport Handles</label>
+                                    <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
+                                        <button type="button" id="crop-mode-move" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Move</button>
+                                        <button type="button" id="crop-mode-scale" class="text-[10px] font-bold py-1 rounded bg-cyan-600 text-white transition-colors shadow">Scale</button>
+                                        <button type="button" id="crop-mode-rotate" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">Rotate</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="text-[10px] text-gray-500 uppercase font-bold">Position</label>
+                                        <button type="button" id="crop-fit" class="text-[10px] text-cyan-400 hover:text-cyan-200 font-bold">Fit</button>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <input type="number" id="crop-pos-x" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop position X">
+                                        <input type="number" id="crop-pos-y" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop position Y">
+                                        <input type="number" id="crop-pos-z" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop position Z">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Size</label>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <input type="number" id="crop-size-x" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop size X">
+                                        <input type="number" id="crop-size-y" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop size Y">
+                                        <input type="number" id="crop-size-z" min="0.01" step="0.01" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop size Z">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Rotation</label>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <input type="number" id="crop-rot-x" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-red-500" aria-label="Crop rotation X">
+                                        <input type="number" id="crop-rot-y" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-green-500" aria-label="Crop rotation Y">
+                                        <input type="number" id="crop-rot-z" min="-180" max="180" step="1" class="bg-gray-800 text-white text-[10px] p-1 rounded border border-gray-700 outline-none text-right focus:border-blue-500" aria-label="Crop rotation Z">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button type="button" id="crop-apply" class="py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold rounded transition-colors">Apply Crop</button>
+                                    <button type="button" id="crop-export-ply" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-100 text-[10px] font-bold rounded border border-cyan-900/60 transition-colors">Export PLY</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Export Video Section -->
-                <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700 space-y-3">
-                    <div class="flex justify-between items-center">
-                         <label class="text-xs font-bold uppercase text-red-400 flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                            Export
-                        </label>
-                    </div>
-                    
+                <!-- Export -->
+                <div class="space-y-3 pb-3 border-b border-gray-800">
+                    <label class="text-xs font-bold uppercase text-gray-500 block">Export</label>
+
                     <div class="grid grid-cols-2 gap-2">
                         <div>
-                            <label class="text-[10px] text-gray-500 uppercase font-bold">Duration (s)</label>
-                            <input type="number" id="export-duration" value="22" min="1" max="60" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">Format</label>
+                            <select id="export-format" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
+                                <option value="mp4">MP4 Video</option>
+                                <option value="png-sequence" selected>PNG Sequence (.zip)</option>
+                            </select>
                         </div>
                         <div>
                             <label class="text-[10px] text-gray-500 uppercase font-bold">FPS</label>
@@ -248,15 +331,7 @@
                     </div>
 
                     <div>
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Format</label>
-                        <select id="export-format" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
-                            <option value="mp4">MP4 Video</option>
-                            <option value="png-sequence" selected>PNG Frame Sequence (.zip)</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Content</label>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Frame Content</label>
                         <select id="export-slice-mode" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
                             <option value="current" selected>Current Preview Style</option>
                             <option value="filled">Filled Mesh Slices</option>
@@ -273,57 +348,56 @@
                              <input type="number" id="export-h" value="1080" placeholder="H" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                         </div>
                     </div>
-                    
-                    <!-- Zoom & Frame Control -->
-                    <div class="space-y-2 pt-1 border-t border-gray-700">
+
+                    <div class="space-y-2 pt-1 border-t border-gray-800">
                         <div class="flex items-center justify-between">
-                             <label class="text-[10px] text-gray-500 uppercase font-bold">Frame Scale</label>
+                             <label class="text-[10px] text-gray-500 uppercase font-bold">Display Fit</label>
                              <div class="flex items-center gap-1">
                                  <button type="button" id="fit-display-frame" title="Fit current model inside the display volume" class="px-2 py-0.5 bg-blue-900/30 hover:bg-blue-800/60 text-blue-200 text-[10px] font-bold rounded border border-blue-900/40 transition-colors">Fit</button>
                                  <input type="number" id="zoom-val" min="0.001" max="2.0" step="0.0001" value="1.000" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
                              </div>
                         </div>
                         <input type="range" id="zoom-slider" min="0" max="1" step="0.001" value="0.78" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                        
-                         <label class="flex items-center gap-2 cursor-pointer mt-1">
-                            <input type="checkbox" id="show-frame" class="w-3 h-3 accent-red-500 rounded bg-gray-700 border-gray-600">
-                            <span class="text-[10px] text-gray-400 uppercase font-bold select-none">Show Display Frame & Travel</span>
-                        </label>
                     </div>
 
-                    <!-- Moving Display -->
-                    <div class="space-y-2 pt-1 border-t border-gray-700">
+                    <div class="space-y-2 pt-1 border-t border-gray-800">
                         <label class="text-[10px] text-gray-500 uppercase font-bold">Moving Display</label>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Width (mm)</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Display Width (mm)</label>
                                 <input type="number" id="display-width-mm" value="536" min="1" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                             </div>
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Height (mm)</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Display Height (mm)</label>
                                 <input type="number" id="display-height-mm" value="301.5" min="1" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Travel (mm)</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Display Travel (mm)</label>
                                 <input type="number" id="display-travel-mm" value="480" min="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                             </div>
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Vertical Fit</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Full Travel Time (s)</label>
+                                <input type="number" id="export-duration" value="22" min="1" max="60" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Vertical Placement</label>
                                 <select id="display-placement" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
                                     <option value="center" selected>Center</option>
                                     <option value="bottom">Bottom</option>
                                 </select>
                             </div>
-                        </div>
-                        <div>
-                            <label class="text-[10px] text-gray-500 uppercase font-bold">Display Offset (mm)</label>
-                            <input type="number" id="display-offset-mm" value="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Display Offset (mm)</label>
+                                <input type="number" id="display-offset-mm" value="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Volume (cm)</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Model Height (cm)</label>
                                 <input type="number" id="sequence-volume-height-cm" value="0" readonly class="w-full bg-gray-900/60 text-blue-300 text-xs p-1 rounded border border-gray-700 outline-none">
                             </div>
                             <div>
@@ -336,86 +410,6 @@
                     <button id="btn-export" class="w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
                         <span id="export-button-label">Offline Render (MP4)</span>
                     </button>
-                </div>
-
-                <!-- Appearance -->
-                <div class="space-y-3">
-                     <label class="text-xs font-bold uppercase text-gray-500 block">Appearance</label>
-                     
-                     <!-- Render Style Switch -->
-                     <div class="bg-gray-800/50 p-1 rounded grid grid-cols-3 gap-1">
-                         <button id="style-mesh" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('mesh')">Solid Mesh</button>
-                         <button id="style-points" class="text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow" onclick="setRenderStyle('points')">Point Cloud</button>
-                         <button id="style-gaussian" class="text-[10px] font-bold py-1 rounded hover:bg-gray-700 text-gray-400 transition-colors" onclick="setRenderStyle('gaussian')">Gaussian</button>
-                     </div>
-
-                     <!-- Mesh Options -->
-                     <div id="mesh-options" class="hidden space-y-3">
-                         <div id="outline-controls" class="bg-gray-800/50 p-2 rounded border border-gray-700 space-y-2">
-                            <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                                <span>Outline Only</span>
-                                <input type="checkbox" id="outline-mode" class="w-3 h-3 accent-purple-500 rounded bg-gray-700 border-gray-600">
-                            </label>
-                            <div id="outline-settings" class="hidden space-y-1">
-                                <div class="flex justify-between">
-                                    <label class="text-[10px] text-gray-500 uppercase font-bold">Thickness</label>
-                                    <span id="outline-val" class="text-[10px] text-purple-400 font-mono">2 px</span>
-                                </div>
-                                <input type="range" id="outline-width" min="1" max="10" step="1" value="2" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
-                            </div>
-                         </div>
-
-                         <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white">
-                            <span>Show 3D Mesh</span>
-                            <input type="checkbox" id="show-mesh" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600" checked onchange="toggleMesh(this.checked)">
-                         </label>
-
-                         <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Fill</label>
-                                <select id="slice-fill-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none">
-                                    <option value="solid" selected>Solid Color</option>
-                                    <option value="mesh">Mesh Color</option>
-                                </select>
-                            </div>
-                            <div id="slice-color-control">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase">Slice Color</label>
-                                <div class="relative w-full h-8 rounded-md overflow-hidden ring-1 ring-gray-700 hover:ring-gray-500 transition-all">
-                                    <input type="color" id="color-picker" value="#ffffff" oninput="setCapColor(this.value)">
-                                </div>
-                            </div>
-                         </div>
-
-                     </div>
-                     
-                     <!-- Point Options -->
-                     <div id="point-options" class="space-y-3">
-                        <div>
-                            <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point / Splat Size</label>
-                                <input type="number" id="point-size-val" min="0.001" max="1.0" step="0.0001" value="0.0100" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
-                            </div>
-                            <input type="range" id="point-size" min="0" max="1" step="0.001" value="0.333" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                         </div>
-                         <div>
-                            <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Preview Density</label>
-                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">10%</span>
-                            </div>
-                            <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                         </div>
-                         <div>
-                            <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Slice Thickness</label>
-                                <span id="point-thick-val" class="text-[10px] text-blue-400 font-mono">0.010</span>
-                            </div>
-                            <select id="slice-thickness-mode" class="w-full bg-gray-800 text-white text-xs p-1 rounded border border-gray-700 outline-none mb-2">
-                                <option value="frame-pitch" selected>Frame Pitch</option>
-                                <option value="manual">Manual</option>
-                            </select>
-                            <input type="range" id="point-thick" min="0.00005" max="0.2" step="0.00005" value="0.010" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
-                         </div>
-                      </div>
                 </div>
 
                 <!-- Info -->
@@ -587,6 +581,7 @@
         let sliceColor = new THREE.Color(0xffffff);
         let sliceFillMode = 'solid';
         let meshSliceFillEntries = [];
+        let visualMeshClippingEnabled = true;
         
         // Point Settings
         let pointSize = DEFAULT_POINT_SIZE;
@@ -2441,9 +2436,25 @@
             if (renderStyle === 'points' || renderStyle === 'gaussian') {
                 if (renderStyle === 'gaussian') updateGaussianDepthSorting(false);
                 renderer.render(scene, activeCamera);
+            } else if (showFullPointCloud) {
+                renderFullMeshFrame();
             } else {
                 performMultiPassRender();
             }
+        }
+
+        function renderFullMeshFrame() {
+            const meshCheckbox = document.getElementById('show-mesh');
+            setVisualMeshClippingEnabled(false);
+            visualGroup.visible = showFullPointCloud || !!meshCheckbox?.checked;
+            stencilGroup.visible = false;
+            capGroup.visible = false;
+            pointGroup.visible = false;
+            gaussianGroup.visible = false;
+            renderer.setRenderTarget(null);
+            renderer.autoClear = true;
+            renderer.clear(true, true, true);
+            renderer.render(scene, activeCamera);
         }
 
         function setMeshSliceFillEntriesVisible(visible) {
@@ -2489,6 +2500,7 @@
         }
 
         function performMultiPassRender(fillMode = sliceFillMode) {
+            setVisualMeshClippingEnabled(true);
             const currentBg = scene.background;
             const visVisible = visualGroup.visible;
             const useMeshFillColors = fillMode === 'mesh' && meshSliceFillEntries.length > 0 && !outlineMode;
@@ -3720,6 +3732,22 @@
             materials.forEach((m) => { if (m) callback(m); });
         }
 
+        function setVisualMeshClippingEnabled(enabled) {
+            const shouldClip = !!enabled;
+            if (visualMeshClippingEnabled === shouldClip) return;
+            visualMeshClippingEnabled = shouldClip;
+            if (!visualGroup || !clippingPlane) return;
+
+            const planes = shouldClip ? [clippingPlane] : [];
+            visualGroup.traverse((node) => {
+                if (!node.isMesh) return;
+                applyToMaterials(node.material, (material) => {
+                    material.clippingPlanes = planes;
+                    material.needsUpdate = true;
+                });
+            });
+        }
+
         function getOrientationEuler() {
             const rx = clamp(finiteNumber(document.getElementById('rot-x').value, 0), 0, 360) * (Math.PI / 180);
             const ry = clamp(finiteNumber(document.getElementById('rot-y').value, 0), 0, 360) * (Math.PI / 180);
@@ -3910,6 +3938,7 @@
                     });
                 }
             });
+            visualMeshClippingEnabled = true;
 
             const getMeshArea = (mesh) => {
                 if(!mesh.geometry.attributes.position) return 0;
@@ -4055,6 +4084,7 @@
                 gaussianMaterials = [];
                 activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
                 meshSliceFillEntries = [];
+                visualMeshClippingEnabled = true;
                 cropBoxInitialized = false;
 
                 const imported = normalizeImportedAsset(asset, extension, getImportMode());
@@ -4113,15 +4143,20 @@
             const checkbox = document.getElementById('show-full-cloud');
             if (checkbox) checkbox.checked = showFullPointCloud;
             applyPointClippingPlanes(!showFullPointCloud);
+            if (renderStyle === 'mesh') {
+                const meshCheckbox = document.getElementById('show-mesh');
+                setVisualMeshClippingEnabled(!showFullPointCloud);
+                visualGroup.visible = showFullPointCloud || !!meshCheckbox?.checked;
+                stencilGroup.visible = !showFullPointCloud;
+                capGroup.visible = !showFullPointCloud;
+            }
             updatePlaneHeight(document.getElementById('slice-slider').value);
             updateSliceControlVisibility();
         }
 
         function updateSliceControlVisibility() {
             const sliceControl = document.getElementById('slice-control');
-            const meshCheckbox = document.getElementById('show-mesh');
-            const fullMeshVisible = renderStyle === 'mesh' && !!meshCheckbox?.checked;
-            if (sliceControl) sliceControl.classList.toggle('hidden', showFullPointCloud || fullMeshVisible);
+            if (sliceControl) sliceControl.classList.toggle('hidden', showFullPointCloud);
         }
 
         function getBoundsWrapper() {
@@ -4239,7 +4274,7 @@
         }
         
         window.toggleMesh = function(visible) {
-            if (visualGroup) visualGroup.visible = visible;
+            if (visualGroup) visualGroup.visible = renderStyle === 'mesh' ? (showFullPointCloud || visible) : visible;
             updateSliceControlVisibility();
         }
         
@@ -4288,9 +4323,10 @@
                 
                 pointGroup.visible = false;
                 gaussianGroup.visible = false;
-                visualGroup.visible = document.getElementById('show-mesh').checked;
-                stencilGroup.visible = true;
-                capGroup.visible = true;
+                setVisualMeshClippingEnabled(!showFullPointCloud);
+                visualGroup.visible = showFullPointCloud || document.getElementById('show-mesh').checked;
+                stencilGroup.visible = !showFullPointCloud;
+                capGroup.visible = !showFullPointCloud;
             } else if (style === 'gaussian') {
                 btnGaussian.className = "text-[10px] font-bold py-1 rounded bg-blue-600 text-white transition-colors shadow";
                 pointOpts.classList.remove('hidden');
@@ -4346,7 +4382,7 @@
 
         function updateExportButtonLabel() {
             const format = document.getElementById('export-format').value;
-            const label = format === 'png-sequence' ? 'Export PNG Frames (.zip)' : 'Offline Render (MP4)';
+            const label = format === 'png-sequence' ? 'Export Frames (.zip)' : 'Offline Render (MP4)';
             document.getElementById('export-button-label').textContent = label;
         }
 
@@ -4503,6 +4539,7 @@
                 modelTransformControls.enabled = false;
             }
             if (settings.renderStyle === 'mesh') {
+                setVisualMeshClippingEnabled(true);
                 visualGroup.visible = false;
                 pointGroup.visible = false;
                 gaussianGroup.visible = false;
@@ -4642,7 +4679,8 @@
             }
 
             const wasFrameVisible = frameHelper.visible;
-            const wasMeshVisible = visualGroup.visible;
+            const meshCheckbox = document.getElementById('show-mesh');
+            const wasMeshVisible = meshCheckbox ? meshCheckbox.checked : visualGroup.visible;
             const previousPointDrawFraction = pointDrawFraction;
             let didPrepareRenderState = false;
 
@@ -5202,17 +5240,24 @@
             if (capMaterial) capMaterial.color.set(hexStr);
         }
         
+        function setPanelOpen(open) {
+            isPanelOpen = !!open;
+            const panel = document.getElementById('controls-panel');
+            const opener = document.getElementById('panel-open-btn');
+            if (panel) panel.classList.toggle('hidden', !isPanelOpen);
+            if (opener) opener.classList.toggle('hidden', isPanelOpen);
+        }
+
+        window.openSettingsPanel = function() {
+            setPanelOpen(true);
+        }
+
+        window.closeSettingsPanel = function() {
+            setPanelOpen(false);
+        }
+
         window.togglePanel = function() {
-            const content = document.getElementById('panel-content');
-            const btn = document.getElementById('minimize-btn');
-            isPanelOpen = !isPanelOpen;
-            if(isPanelOpen) {
-                content.style.display = 'block';
-                btn.style.transform = 'rotate(0deg)';
-            } else {
-                content.style.display = 'none';
-                btn.style.transform = 'rotate(180deg)';
-            }
+            setPanelOpen(!isPanelOpen);
         }
 
         function onWindowResize() {
