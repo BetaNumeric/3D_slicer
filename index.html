@@ -413,9 +413,6 @@
                         </div>
                     </div>
 
-                    <button id="btn-export" class="w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
-                        <span id="export-button-label">Offline Render (MP4)</span>
-                    </button>
                 </div>
 
                 <!-- Info -->
@@ -461,10 +458,13 @@
 
             <!-- Fixed Import Footer -->
             <div id="import-footer" class="p-3 bg-black/50 border-t border-gray-800 space-y-2">
+                <button id="btn-export" class="w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
+                    <span id="export-button-label">Export Frames (.zip)</span>
+                </button>
                 <div class="grid grid-cols-[1fr_auto] gap-2">
                     <label class="flex items-center justify-center min-w-0 cursor-pointer hover:bg-gray-800/60 transition px-3 py-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
                         <input type="file" id="file-input" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.splat,.sog" class="hidden"/>
-                        <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Load Model / Point Cloud</span>
+                        <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Load Model</span>
                     </label>
                     <button id="btn-reset" class="px-3 py-2 text-[10px] font-bold text-gray-500 hover:text-white bg-gray-900/70 border border-gray-700 hover:bg-gray-700 rounded transition-all">
                         Reset
@@ -482,12 +482,15 @@
     <div id="rec-overlay" class="hidden absolute top-4 right-4 z-30 w-64 bg-gray-900/95 border border-gray-700 p-4 rounded-xl shadow-2xl backdrop-blur">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-bold uppercase tracking-wider text-red-400 animate-pulse">Rendering...</span>
-            <span id="rec-percentage" class="text-xs font-mono text-white">0%</span>
+            <div class="flex items-center gap-2">
+                <button type="button" id="btn-cancel-export" class="px-2 py-0.5 bg-gray-800 hover:bg-red-900/80 text-gray-200 hover:text-white text-[10px] font-bold rounded border border-gray-700 hover:border-red-700 transition-colors">Stop</button>
+                <span id="rec-percentage" class="text-xs font-mono text-white">0%</span>
+            </div>
         </div>
         <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
             <div id="rec-progress-bar" class="bg-red-500 h-1.5 rounded-full" style="width: 0%"></div>
         </div>
-        <p class="text-[10px] text-gray-500 mt-2">Offline Rendering. Safe Mode.</p>
+        <p id="rec-status" class="text-[10px] text-gray-500 mt-2">Offline rendering. Settings are locked.</p>
     </div>
 
     <!-- 3D Canvas -->
@@ -610,6 +613,8 @@
 
         // Export State
         let isProcessingVideo = false;
+        let exportCancelRequested = false;
+        let isRestoringExportState = false;
         let captureScale = 1.0; 
         let displayVolumeLocked = false;
         let lockedDisplayVolumeMinDepth = null;
@@ -4488,9 +4493,62 @@
         }
 
         function updateExportButtonLabel() {
+            const button = document.getElementById('btn-export');
+            const labelEl = document.getElementById('export-button-label');
+            if (!button || !labelEl) return;
+
+            if (isProcessingVideo) {
+                labelEl.textContent = exportCancelRequested ? 'Stopping...' : 'Stop Render';
+                button.className = "w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
+                button.disabled = false;
+                return;
+            }
+
             const format = document.getElementById('export-format').value;
             const label = format === 'png-sequence' ? 'Export Frames (.zip)' : 'Offline Render (MP4)';
-            document.getElementById('export-button-label').textContent = label;
+            labelEl.textContent = label;
+            button.className = "w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
+            button.disabled = false;
+        }
+
+        function setExportUiLocked(locked) {
+            const panel = document.getElementById('controls-panel');
+            if (!panel) return;
+            const allowed = new Set(['btn-export', 'panel-close-btn']);
+
+            panel.querySelectorAll('input, select, button, textarea').forEach((el) => {
+                if (allowed.has(el.id)) return;
+                if (locked) {
+                    if (!el.dataset.exportPrevDisabled) {
+                        el.dataset.exportPrevDisabled = el.disabled ? '1' : '0';
+                    }
+                    el.disabled = true;
+                    el.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    if (el.dataset.exportPrevDisabled !== undefined) {
+                        el.disabled = el.dataset.exportPrevDisabled === '1';
+                        delete el.dataset.exportPrevDisabled;
+                    }
+                    el.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            });
+
+            const content = document.getElementById('panel-content');
+            if (content) content.classList.toggle('opacity-60', locked);
+            if (!locked) syncDisplayLockUI();
+            updateExportButtonLabel();
+        }
+
+        function updateExportStatus(message) {
+            const status = document.getElementById('rec-status');
+            if (status) status.textContent = message;
+        }
+
+        function requestExportCancel() {
+            if (!isProcessingVideo || exportCancelRequested) return;
+            exportCancelRequested = true;
+            updateExportStatus('Stopping after the current frame...');
+            updateExportButtonLabel();
         }
 
         function getSequenceTravelRatio(sequence) {
@@ -4706,7 +4764,7 @@
             } else {
                 setSliceWindowUniforms(false);
             }
-            updatePlaneHeight(frameInfo.sliceValueModelUnits);
+            setSlicePlaneDisplayPosition(frameInfo.effectiveSliceValueModelUnits);
 
             if (settings.renderStyle === 'mesh') {
                 performMultiPassRender(settings.sliceFillMode);
@@ -4758,6 +4816,7 @@
 
         async function waitForEncoderQueue(videoEncoder) {
             while (
+                !exportCancelRequested &&
                 videoEncoder.state !== 'closed' &&
                 typeof videoEncoder.encodeQueueSize === 'number' &&
                 videoEncoder.encodeQueueSize > EXPORT_ENCODER_QUEUE_LIMIT
@@ -4768,7 +4827,10 @@
 
         // --- OFFLINE RENDERING LOGIC ---
         async function startExport() {
-            if (isProcessingVideo) return;
+            if (isProcessingVideo) {
+                requestExportCancel();
+                return;
+            }
             if (!activeWrappers.visual) {
                 alert("No model is loaded yet.");
                 return;
@@ -4797,8 +4859,11 @@
             const wasMeshVisible = meshCheckbox ? meshCheckbox.checked : visualGroup.visible;
             const previousPointDrawFraction = pointDrawFraction;
             let didPrepareRenderState = false;
+            let completed = false;
 
             isProcessingVideo = true;
+            exportCancelRequested = false;
+            updateExportButtonLabel();
 
             try {
                 // Save State
@@ -4815,22 +4880,29 @@
                 didPrepareRenderState = true;
 
                 setAutoScanEnabled(false);
+                setExportUiLocked(true);
 
                 document.getElementById('rec-overlay').classList.remove('hidden');
                 const percentEl = document.getElementById('rec-percentage');
                 const barEl = document.getElementById('rec-progress-bar');
+                updateExportStatus('Offline rendering. Settings are locked.');
                 updateExportProgress(0, percentEl, barEl);
 
                 prepareExportRenderState(settings);
 
                 if (settings.format === 'png-sequence') {
-                    await exportPngSequence(settings, percentEl, barEl);
+                    completed = await exportPngSequence(settings, percentEl, barEl);
                 } else {
-                    await exportMp4(settings, percentEl, barEl);
+                    completed = await exportMp4(settings, percentEl, barEl);
                 }
+                updateExportStatus(completed ? 'Export complete.' : 'Canceled.');
             } catch (e) {
-                console.error("Export failed:", e);
-                alert("Export failed.");
+                if (!exportCancelRequested) {
+                    console.error("Export failed:", e);
+                    alert("Export failed.");
+                } else {
+                    updateExportStatus('Canceled.');
+                }
             } finally {
                 if (didPrepareRenderState) {
                     restoreState(wasFrameVisible, wasMeshVisible);
@@ -4838,23 +4910,28 @@
                     document.getElementById('rec-overlay').classList.add('hidden');
                 }
                 isProcessingVideo = false;
+                exportCancelRequested = false;
+                setExportUiLocked(false);
                 setPointDrawFraction(previousPointDrawFraction);
                 refreshSliceThicknessFromMode();
                 setFullPointCloudVisible(showFullPointCloud);
                 updateCropHelperVisibility();
+                updateExportButtonLabel();
             }
         }
 
         async function exportMp4(settings, percentEl, barEl) {
             const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.0/+esm');
+            if (exportCancelRequested) return false;
             const muxer = new Muxer({
                 target: new ArrayBufferTarget(),
                 video: { codec: 'avc', width: settings.width, height: settings.height },
                 fastStart: 'in-memory'
             });
+            let encoderError = null;
             const videoEncoder = new VideoEncoder({
                 output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-                error: e => { console.error("Encoding error:", e); isProcessingVideo = false; }
+                error: e => { encoderError = e; }
             });
 
             const pixelCount = settings.width * settings.height;
@@ -4870,12 +4947,16 @@
             };
 
             await configureVideoEncoder(videoEncoder, encoderConfig);
+            if (exportCancelRequested) {
+                if (videoEncoder.state !== 'closed') videoEncoder.close();
+                return false;
+            }
 
             const totalFrames = getTotalExportFrames(settings);
             const frameDurationUs = 1e6 / settings.fps;
 
             for (let i = 0; i < totalFrames; i++) {
-                if (!isProcessingVideo || videoEncoder.state === 'closed') break;
+                if (exportCancelRequested || encoderError || videoEncoder.state === 'closed') break;
 
                 const frameInfo = getExportFrameInfo(i, settings);
                 renderExportFrame(frameInfo, settings);
@@ -4891,30 +4972,44 @@
                 if (i % 3 === 0) await yieldToBrowser();
             }
 
+            if (encoderError) throw encoderError;
+            if (exportCancelRequested) {
+                if (videoEncoder.state !== 'closed') videoEncoder.close();
+                return false;
+            }
+
             if (videoEncoder.state !== 'closed') {
                 await videoEncoder.flush();
+            }
+            if (encoderError) throw encoderError;
+            if (exportCancelRequested) {
+                if (videoEncoder.state !== 'closed') videoEncoder.close();
+                return false;
             }
             muxer.finalize();
 
             const { buffer } = muxer.target;
             const blob = new Blob([buffer], { type: 'video/mp4' });
             downloadBlob(blob, `${settings.exportBaseName}.mp4`);
+            return true;
         }
 
         async function exportPngSequence(settings, percentEl, barEl) {
             const JSZip = await loadJSZip();
+            if (exportCancelRequested) return false;
             const zip = new JSZip();
             const folder = zip.folder(settings.exportBaseName);
             const totalFrames = getTotalExportFrames(settings);
             const digits = String(totalFrames - 1).length;
 
             for (let i = 0; i < totalFrames; i++) {
-                if (!isProcessingVideo) break;
+                if (exportCancelRequested) return false;
 
                 const frameInfo = getExportFrameInfo(i, settings);
                 renderExportFrame(frameInfo, settings);
 
                 const blob = await canvasToPngBlob();
+                if (exportCancelRequested) return false;
                 const filename = `${settings.exportBaseName}_frame_${String(i).padStart(digits, '0')}.png`;
                 folder.file(filename, blob, { binary: true, compression: 'STORE' });
 
@@ -4923,18 +5018,28 @@
                 await yieldToBrowser();
             }
 
+            if (exportCancelRequested) return false;
             folder.file('sequence.json', sequenceJsonBlob(settings));
 
-            const zipBlob = await zip.generateAsync({
-                type: 'blob',
-                compression: 'STORE',
-                streamFiles: true
-            }, (metadata) => {
-                const progress = clamp(metadata.percent / 100, 0, 1);
-                updateExportProgress(progress, percentEl, barEl);
-            });
+            let zipBlob;
+            try {
+                zipBlob = await zip.generateAsync({
+                    type: 'blob',
+                    compression: 'STORE',
+                    streamFiles: true
+                }, (metadata) => {
+                    if (exportCancelRequested) throw new Error('EXPORT_CANCELLED');
+                    const progress = clamp(metadata.percent / 100, 0, 1);
+                    updateExportProgress(progress, percentEl, barEl);
+                });
+            } catch (error) {
+                if (exportCancelRequested || error?.message === 'EXPORT_CANCELLED') return false;
+                throw error;
+            }
 
+            if (exportCancelRequested) return false;
             downloadBlob(zipBlob, `${settings.exportBaseName}.zip`);
+            return true;
         }
 
         function downloadBlob(blob, filename) {
@@ -4968,7 +5073,12 @@
             });
             postMaterial.uniforms.uResolution.value.set(w * preExportState.pixelRatio, h * preExportState.pixelRatio);
 
-            onWindowResize(); 
+            isRestoringExportState = true;
+            try {
+                onWindowResize();
+            } finally {
+                isRestoringExportState = false;
+            }
             document.getElementById('rec-overlay').classList.add('hidden');
 
             if (viewMode === '3d') setMode('3d'); else setMode('2d');
@@ -4991,19 +5101,21 @@
             updateFrameHelper();
         }
 
+        function setSlicePlaneDisplayPosition(displayV) {
+            clippingPlane.constant = displayV;
+            setObjectSlicePosition(capMesh, displayV);
+
+            const half = sliceThickness / 2;
+            slabPlaneBottom.constant = -displayV + half;
+            slabPlaneTop.constant = displayV + half;
+        }
+
         function updatePlaneHeight(val) {
             const range = getActiveSliceRange();
             const fallback = finiteNumber(document.getElementById('slice-slider').value, range.min);
             const v = clamp(finiteNumber(val, fallback), range.min, range.max);
             const displayV = getOffsetSliceValue(v);
-            // Mesh Slice
-            clippingPlane.constant = displayV;
-            setObjectSlicePosition(capMesh, displayV);
-            
-            // Point Slab
-            const half = sliceThickness / 2;
-            slabPlaneBottom.constant = -displayV + half;
-            slabPlaneTop.constant = displayV + half;
+            setSlicePlaneDisplayPosition(displayV);
             
             if(!isProcessingVideo) {
                 const slider = document.getElementById('slice-slider');
@@ -5081,6 +5193,7 @@
             document.getElementById('btn-front-view').addEventListener('click', () => setOrthoPresetView('front'));
             document.getElementById('btn-side-view').addEventListener('click', () => setOrthoPresetView('side'));
             document.getElementById('btn-export').addEventListener('click', startExport);
+            document.getElementById('btn-cancel-export').addEventListener('click', requestExportCancel);
             document.getElementById('btn-info-refresh').addEventListener('click', (e) => {
                 e.stopPropagation();
                 refreshInfoPanelExact();
@@ -5380,6 +5493,7 @@
         }
 
         function onWindowResize() {
+            if (isProcessingVideo && !isRestoringExportState) return;
             const w = window.innerWidth;
             const h = window.innerHeight;
             const aspect = w / h;
