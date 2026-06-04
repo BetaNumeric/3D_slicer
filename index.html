@@ -395,9 +395,13 @@
                                 <input type="number" id="display-offset-mm" value="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                             </div>
                         </div>
+                        <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-800/40 border border-gray-700 rounded px-2 py-1.5">
+                            <span>Lock Display Volume</span>
+                            <input type="checkbox" id="lock-display-volume" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                        </label>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Model Height (cm)</label>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Captured Height (cm)</label>
                                 <input type="number" id="sequence-volume-height-cm" value="0" readonly class="w-full bg-gray-900/60 text-blue-300 text-xs p-1 rounded border border-gray-700 outline-none">
                             </div>
                             <div>
@@ -604,6 +608,8 @@
         // Export State
         let isProcessingVideo = false;
         let captureScale = 1.0; 
+        let displayVolumeLocked = false;
+        let lockedDisplayVolumeMinDepth = null;
         let preExportState = {
             width: 0,
             height: 0,
@@ -696,6 +702,7 @@
 
         function setSliceAxis(axis) {
             if (!SLICE_AXES[axis]) axis = 'y';
+            if (displayVolumeLocked) setDisplayVolumeLocked(false, { sync: false });
             sliceAxis = axis;
             configureSliceGeometry();
             updateBounds();
@@ -820,19 +827,93 @@
             return finiteNumber(value, 0) + getDisplayOffsetModelUnits(display);
         }
 
-        function getSequenceInstructions(display = getMovingDisplayInputs()) {
+        function getDisplayVolumeState(display = getMovingDisplayInputs()) {
             const travelCm = display.travelMm / 10;
-            const cmPerModelUnit = getDisplayCmPerModelUnit(display);
-            const volumeHeightCm = roundCm(Math.max(0, modelBounds.max - modelBounds.min) * cmPerModelUnit);
-            const centeredStart = (travelCm - volumeHeightCm) / 2;
-            const startCm = roundCm(display.placement === 'bottom' ? 0 : centeredStart);
+            const cmPerModelUnit = Math.max(0.000001, getDisplayCmPerModelUnit(display));
+            const displayWidthUnits = (display.widthMm / 10) / cmPerModelUnit;
+            const displayHeightUnits = (display.heightMm / 10) / cmPerModelUnit;
+            const travelUnits = travelCm / cmPerModelUnit;
+            const offsetUnits = (display.offsetMm / 10) / cmPerModelUnit;
+            const fullModelSpanUnits = Math.max(0, modelBounds.max - modelBounds.min);
+            const fullModelHeightCm = fullModelSpanUnits * cmPerModelUnit;
+            const autoStartCm = display.placement === 'bottom' ? 0 : Math.max(0, (travelCm - fullModelHeightCm) / 2);
+            const autoMinDepth = modelBounds.min - (autoStartCm / cmPerModelUnit) + offsetUnits;
+            const minDepth = displayVolumeLocked && Number.isFinite(lockedDisplayVolumeMinDepth)
+                ? lockedDisplayVolumeMinDepth
+                : autoMinDepth;
+            const maxDepth = minDepth + travelUnits;
+
+            let activeMinDepth = Math.max(modelBounds.min, minDepth);
+            let activeMaxDepth = Math.min(modelBounds.max, maxDepth);
+            if (activeMaxDepth < activeMinDepth) {
+                const nearestDisplayEdge = modelBounds.min > maxDepth ? maxDepth : minDepth;
+                const clampedDepth = clamp(nearestDisplayEdge, modelBounds.min, modelBounds.max);
+                activeMinDepth = clampedDepth;
+                activeMaxDepth = clampedDepth;
+            }
+
+            const activeSpanUnits = Math.max(0, activeMaxDepth - activeMinDepth);
+            const activeStartCm = clamp((activeMinDepth - minDepth) * cmPerModelUnit, 0, Math.max(0, travelCm));
+            const activeHeightCm = Math.min(activeSpanUnits * cmPerModelUnit, Math.max(0, travelCm - activeStartCm));
 
             return {
-                volume_height_cm: volumeHeightCm,
-                start_cm: startCm,
+                cmPerModelUnit,
+                displayWidthUnits,
+                displayHeightUnits,
+                travelCm,
+                travelUnits,
+                offsetUnits,
+                minDepth,
+                maxDepth,
+                activeMinDepth,
+                activeMaxDepth,
+                activeSpanUnits,
+                activeStartCm,
+                activeHeightCm
+            };
+        }
+
+        function getActiveSliceRange(display = getMovingDisplayInputs()) {
+            const state = getDisplayVolumeState(display);
+            return {
+                min: state.activeMinDepth - state.offsetUnits,
+                max: state.activeMaxDepth - state.offsetUnits,
+                span: state.activeSpanUnits
+            };
+        }
+
+        function syncSliceSliderRange(display = getMovingDisplayInputs()) {
+            const range = getActiveSliceRange(display);
+            const slider = document.getElementById('slice-slider');
+            if (!slider) return { ...range, value: range.min };
+
+            slider.min = range.min;
+            slider.max = range.max;
+            slider.step = Math.max(range.span / 1000, 0.00001);
+
+            const current = finiteNumber(slider.value, range.min);
+            const value = clamp(current, range.min, range.max);
+            if (document.activeElement !== slider || current !== value) {
+                slider.value = value;
+            }
+            return { ...range, value };
+        }
+
+        function getSequenceInstructions(display = getMovingDisplayInputs()) {
+            const state = getDisplayVolumeState(display);
+
+            return {
+                volume_height_cm: roundCm(state.activeHeightCm),
+                start_cm: roundCm(state.activeStartCm),
                 display_offset_cm: roundCm(display.offsetMm / 10),
-                cm_per_model_unit: cmPerModelUnit,
-                travel_cm: travelCm
+                cm_per_model_unit: state.cmPerModelUnit,
+                travel_cm: state.travelCm,
+                offset_units: state.offsetUnits,
+                display_min_depth: state.minDepth,
+                display_max_depth: state.maxDepth,
+                active_min_depth: state.activeMinDepth,
+                active_max_depth: state.activeMaxDepth,
+                active_span_model_units: state.activeSpanUnits
             };
         }
 
@@ -840,30 +921,55 @@
             const volumeEl = document.getElementById('sequence-volume-height-cm');
             const startEl = document.getElementById('sequence-start-cm');
             if (!volumeEl || !startEl) return;
-            const sequence = getSequenceInstructions();
+            const display = getMovingDisplayInputs();
+            const sequence = getSequenceInstructions(display);
+            const range = syncSliceSliderRange(display);
             volumeEl.value = sequence.volume_height_cm;
             startEl.value = sequence.start_cm;
             updateFrameHelper();
-            if (clippingPlane && capMesh) updatePlaneHeight(document.getElementById('slice-slider')?.value || modelBounds.min);
+            if (clippingPlane && capMesh) updatePlaneHeight(range.value);
         }
 
         function getDisplayVolumeMetrics(display = getMovingDisplayInputs()) {
-            const sequence = getSequenceInstructions(display);
-            const cmPerModelUnit = Math.max(0.000001, sequence.cm_per_model_unit);
-            const displayWidthUnits = (display.widthMm / 10) / cmPerModelUnit;
-            const displayHeightUnits = (display.heightMm / 10) / cmPerModelUnit;
-            const travelUnits = sequence.travel_cm / cmPerModelUnit;
-            const startUnits = sequence.start_cm / cmPerModelUnit;
-            const offsetUnits = getDisplayOffsetModelUnits(display);
-            const minDepth = modelBounds.min - startUnits + offsetUnits;
+            const state = getDisplayVolumeState(display);
 
             return {
-                displayWidthUnits,
-                displayHeightUnits,
-                travelUnits,
-                offsetUnits,
-                centerDepth: minDepth + travelUnits / 2
+                displayWidthUnits: state.displayWidthUnits,
+                displayHeightUnits: state.displayHeightUnits,
+                travelUnits: state.travelUnits,
+                offsetUnits: state.offsetUnits,
+                minDepth: state.minDepth,
+                maxDepth: state.maxDepth,
+                centerDepth: state.minDepth + state.travelUnits / 2
             };
+        }
+
+        function syncDisplayLockUI() {
+            const checkbox = document.getElementById('lock-display-volume');
+            if (checkbox) checkbox.checked = displayVolumeLocked;
+
+            ['display-placement', 'display-offset-mm'].forEach((id) => {
+                const input = document.getElementById(id);
+                if (!input) return;
+                input.disabled = displayVolumeLocked;
+                input.classList.toggle('opacity-50', displayVolumeLocked);
+                input.classList.toggle('cursor-not-allowed', displayVolumeLocked);
+            });
+        }
+
+        function setDisplayVolumeLocked(locked, options = {}) {
+            const shouldLock = !!locked;
+            const { sync = true } = options;
+
+            if (shouldLock && !displayVolumeLocked) {
+                lockedDisplayVolumeMinDepth = getDisplayVolumeMetrics().minDepth;
+            } else if (!shouldLock) {
+                lockedDisplayVolumeMinDepth = null;
+            }
+
+            displayVolumeLocked = shouldLock;
+            syncDisplayLockUI();
+            if (sync) syncSequencePreview();
         }
 
         function getBoxCorners(box) {
@@ -1018,7 +1124,7 @@
         }
 
         function getPitchMatchedSliceThickness(settings) {
-            const span = Math.max(0, modelBounds.max - modelBounds.min);
+            const span = Math.max(0, finiteNumber(settings?.sequence?.active_span_model_units, modelBounds.max - modelBounds.min));
             const activeFrames = getActiveExportFrameCount(settings);
             if (span <= 0) return SLICE_THICKNESS_MIN;
             if (activeFrames <= 1) return Math.max(SLICE_THICKNESS_MIN, span);
@@ -1847,7 +1953,8 @@
 
             if (cropEnabled && cropBox) updateCropPlanes();
             const axis = getSliceAxisDefinition().vector;
-            const center = getOffsetSliceValue(finiteNumber(document.getElementById('slice-slider')?.value, modelBounds.min));
+            const sliceRange = getActiveSliceRange();
+            const center = getOffsetSliceValue(finiteNumber(document.getElementById('slice-slider')?.value, sliceRange.min));
             const half = Math.max(0, sliceThickness) / 2;
             const minSlice = center - half;
             const maxSlice = center + half;
@@ -2422,12 +2529,14 @@
                 time += 0.01 * scanSpeed;
                 const t = (time % 2);
                 const alpha = t < 1 ? t : 2 - t; 
-                const yPos = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, alpha);
+                const sliceRange = getActiveSliceRange();
+                const yPos = THREE.MathUtils.lerp(sliceRange.min, sliceRange.max, alpha);
                 updatePlaneHeight(yPos);
             }
             
             if(frameHelper.visible) {
-                setObjectSlicePosition(frameHelper, finiteNumber(document.getElementById('slice-slider').value, getAxisComponent(frameHelper.position)));
+                const rawSliceValue = finiteNumber(document.getElementById('slice-slider').value, getAxisComponent(frameHelper.position));
+                setObjectSlicePosition(frameHelper, getOffsetSliceValue(rawSliceValue));
             }
 
             controls.update();
@@ -4074,6 +4183,7 @@
                     return;
                 }
                 currentModelBaseName = getModelBaseName(url, fileName);
+                setDisplayVolumeLocked(false, { sync: false });
 
                 clearGroup(visualGroup);
                 clearGroup(stencilGroup);
@@ -4173,13 +4283,8 @@
             if (box.isEmpty()) return;
             const min = getAxisComponent(box.min);
             const max = getAxisComponent(box.max);
-            const height = max - min;
             modelBounds.min = min;
             modelBounds.max = max;
-            const slider = document.getElementById('slice-slider');
-            slider.min = modelBounds.min;
-            slider.max = modelBounds.max;
-            slider.step = Math.max(height / 1000, 0.00001);
             setModelPositionControlRanges();
             syncSequencePreview();
         }
@@ -4388,7 +4493,10 @@
 
         function getSequenceTravelRatio(sequence) {
             const travelCm = Math.max(0, finiteNumber(sequence?.travel_cm, 0));
-            const volumeCm = Math.max(0, finiteNumber(sequence?.volume_height_cm, 0));
+            const exactVolumeCm = Number.isFinite(sequence?.active_span_model_units) && Number.isFinite(sequence?.cm_per_model_unit)
+                ? sequence.active_span_model_units * sequence.cm_per_model_unit
+                : sequence?.volume_height_cm;
+            const volumeCm = Math.max(0, finiteNumber(exactVolumeCm, 0));
             if (travelCm <= 0) return volumeCm > 0 ? 1 : 0;
             return clamp(volumeCm / travelCm, 0, 1);
         }
@@ -4432,9 +4540,11 @@
             const totalFrames = getTotalExportFrames(settings);
             const timeSeconds = index / settings.fps;
             const progress = totalFrames === 1 ? 0 : index / (totalFrames - 1);
-            const offsetUnits = (settings.sequence?.display_offset_cm || 0) / Math.max(0.000001, settings.sequence?.cm_per_model_unit || 1);
-            const sliceValueModelUnits = THREE.MathUtils.lerp(modelBounds.min, modelBounds.max, progress);
-            const effectiveSliceValueModelUnits = sliceValueModelUnits + offsetUnits;
+            const offsetUnits = finiteNumber(settings.sequence?.offset_units, (settings.sequence?.display_offset_cm || 0) / Math.max(0.000001, settings.sequence?.cm_per_model_unit || 1));
+            const activeMinDepth = finiteNumber(settings.sequence?.active_min_depth, modelBounds.min + offsetUnits);
+            const activeMaxDepth = finiteNumber(settings.sequence?.active_max_depth, modelBounds.max + offsetUnits);
+            const effectiveSliceValueModelUnits = THREE.MathUtils.lerp(activeMinDepth, activeMaxDepth, progress);
+            const sliceValueModelUnits = effectiveSliceValueModelUnits - offsetUnits;
             const physicalStartMm = (settings.sequence?.start_cm || 0) * 10;
             const physicalVolumeMm = (settings.sequence?.volume_height_cm || 0) * 10;
             return {
@@ -4444,7 +4554,7 @@
                 sliceProgress: progress,
                 sliceValueModelUnits,
                 effectiveSliceValueModelUnits,
-                physicalPositionMm: physicalStartMm + physicalVolumeMm * progress + (settings.sequence?.display_offset_cm || 0) * 10
+                physicalPositionMm: physicalStartMm + physicalVolumeMm * progress
             };
         }
 
@@ -4482,7 +4592,7 @@
                 exportBaseName: currentModelBaseName || 'model',
                 estimatedBitrate
             };
-            settings.modelSpanUnits = Math.max(0, modelBounds.max - modelBounds.min);
+            settings.modelSpanUnits = Math.max(0, finiteNumber(settings.sequence.active_span_model_units, modelBounds.max - modelBounds.min));
             settings.frameCount = getSequenceFrameCount(settings.fps, settings.fullTravelDuration, settings.sequence, settings.modelSpanUnits);
             settings.activeDuration = settings.frameCount / settings.fps;
             settings.framePitchModelUnits = getPitchMatchedSliceThickness(settings);
@@ -4878,8 +4988,9 @@
         }
 
         function updatePlaneHeight(val) {
-            const fallback = finiteNumber(document.getElementById('slice-slider').value, 0);
-            const v = clamp(finiteNumber(val, fallback), modelBounds.min, modelBounds.max);
+            const range = getActiveSliceRange();
+            const fallback = finiteNumber(document.getElementById('slice-slider').value, range.min);
+            const v = clamp(finiteNumber(val, fallback), range.min, range.max);
             const displayV = getOffsetSliceValue(v);
             // Mesh Slice
             clippingPlane.constant = displayV;
@@ -4984,6 +5095,9 @@
             ['display-width-mm', 'display-height-mm', 'display-travel-mm', 'display-offset-mm', 'display-placement'].forEach((id) => {
                 document.getElementById(id).addEventListener('input', syncSequencePreview);
                 document.getElementById(id).addEventListener('change', syncSequencePreview);
+            });
+            document.getElementById('lock-display-volume').addEventListener('change', (e) => {
+                setDisplayVolumeLocked(e.target.checked);
             });
             document.getElementById('btn-reset').addEventListener('click', () => {
                 revokeActiveUploadUrl();
@@ -5128,6 +5242,7 @@
             updateSliceControlVisibility();
             updateOrthoViewButtonsVisibility();
             updateSliceFillModeUI();
+            syncDisplayLockUI();
             syncSequencePreview();
             markInfoExactCountsStale();
         }
