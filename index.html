@@ -6,7 +6,9 @@
     <title>3D Slicer & Exporter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
@@ -163,10 +165,10 @@
                     <div id="point-options" class="space-y-3">
                         <div>
                             <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point / Splat Size</label>
-                                <input type="number" id="point-size-val" min="0.001" max="1.0" step="0.0001" value="0.0100" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Point / Splat Size (px)</label>
+                                <input type="number" id="point-size-val" min="0.25" max="96" step="0.1" value="4.0" class="w-20 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
                             </div>
-                            <input type="range" id="point-size" min="0" max="1" step="0.001" value="0.333" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <input type="range" id="point-size" min="0" max="1" step="0.001" value="0.466" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                         </div>
                         <div>
                             <div class="flex justify-between">
@@ -461,7 +463,7 @@
             <div id="import-footer" class="p-3 bg-black/50 border-t border-gray-800 space-y-2">
                 <div class="grid grid-cols-[1fr_auto] gap-2">
                     <label class="flex items-center justify-center min-w-0 cursor-pointer hover:bg-gray-800/60 transition px-3 py-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
-                        <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply,.splat,.sog" class="hidden"/>
+                        <input type="file" id="file-input" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.splat,.sog" class="hidden"/>
                         <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Load Model / Point Cloud</span>
                     </label>
                     <button id="btn-reset" class="px-3 py-2 text-[10px] font-bold text-gray-500 hover:text-white bg-gray-900/70 border border-gray-700 hover:bg-gray-700 rounded transition-all">
@@ -496,9 +498,10 @@
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
         const FRUSTUM_SIZE = 3.0;
         const MAX_POINTS = 12000000;
-        const DEFAULT_POINT_SIZE = 0.01;
-        const POINT_SIZE_MIN = 0.001;
-        const POINT_SIZE_MAX = 1.0;
+        const DEFAULT_POINT_SIZE = 4.0;
+        const POINT_SIZE_MIN = 0.25;
+        const POINT_SIZE_MAX = 96.0;
+        const POINT_SIZE_REFERENCE_HEIGHT = 1080;
         const GAUSSIAN_REFERENCE_RADIUS = 0.012;
         const GAUSSIAN_MIN_RADIUS = 0.0015;
         const GAUSSIAN_MAX_RADIUS = 0.06;
@@ -771,14 +774,13 @@
             });
         }
 
-        function getPointExportPixelScale(exportHeight) {
-            const previewHeight = Math.max(
-                1,
-                preExportState.drawingBufferHeight ||
-                renderer.domElement.height ||
-                Math.round(window.innerHeight * renderer.getPixelRatio())
-            );
-            return Math.max(0.001, finiteNumber(exportHeight, previewHeight) / previewHeight);
+        function updatePointViewportHeight(height = renderer?.domElement?.height || 1) {
+            const viewportHeight = Math.max(1, finiteNumber(height, 1));
+            pointMaterials.forEach((material) => {
+                if (material.uniforms.uViewportHeight) {
+                    material.uniforms.uViewportHeight.value = viewportHeight;
+                }
+            });
         }
 
         function setCaptureScale(value, source = '') {
@@ -2509,10 +2511,10 @@
             if(isProcessingVideo) return; 
             updateInfoFps(performance.now());
 
-            // Update Point Uniforms every frame for camera switch
+            // Update point uniforms every frame for camera and output-size changes.
             const isOrtho = (activeCamera.isOrthographicCamera) ? 1.0 : 0.0;
-            // Use active camera zoom to scale points in ortho mode
             const orthoZoom = activeCamera.zoom;
+            updatePointViewportHeight(renderer.domElement.height);
             
             pointMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = isOrtho;
@@ -2678,6 +2680,7 @@
                     map: { value: texture || null },
                     size: { value: pointSize },
                     uPointPixelScale: { value: pointPixelScale },
+                    uViewportHeight: { value: 1.0 },
                     diffuse: { value: new THREE.Color(color) },
                     uIsOrtho: { value: 0.0 },
                     uOrthoZoom: { value: 1.0 },
@@ -2690,6 +2693,7 @@
                     ${hasVertexColors ? 'attribute vec3 color;' : ''}
                     uniform float size;
                     uniform float uPointPixelScale;
+                    uniform float uViewportHeight;
                     uniform float uIsOrtho;
                     uniform float uOrthoZoom;
                     uniform vec3 uSliceAxis;
@@ -2703,14 +2707,7 @@
                         vec4 worldPosition = modelMatrix * vec4(position, 1.0);
                         vSliceCoord = dot(worldPosition.xyz, uSliceAxis);
                         vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-                        
-                        if (uIsOrtho > 0.5) {
-                            // Ortho Size: Fixed pixel size * zoom factor (approx 60x scalar)
-                            gl_PointSize = size * 60.0 * uOrthoZoom * uPointPixelScale;
-                        } else {
-                            // Perspective Size: Attenuate by depth
-                            gl_PointSize = size * ( 50.0 / -mvPosition.z ) * uPointPixelScale;
-                        }
+                        gl_PointSize = max(0.1, size * (uViewportHeight / ${POINT_SIZE_REFERENCE_HEIGHT.toFixed(1)}) * uPointPixelScale);
                         
                         gl_Position = projectionMatrix * mvPosition;
                         #include <clipping_planes_vertex>
@@ -3589,6 +3586,7 @@
 
         function createImportLoader(extension) {
             if (extension === 'glb' || extension === 'gltf') return createGltfLoader();
+            if (extension === 'fbx') return THREE.FBXLoader ? new THREE.FBXLoader() : null;
             if (extension === 'obj') return new THREE.OBJLoader();
             if (extension === 'stl') return new THREE.STLLoader();
             if (extension === 'ply') return createPlyLoader();
@@ -3779,6 +3777,10 @@
             }
 
             if (extension === 'obj') {
+                return { root: asset, isPointCloud: false, gaussianRoot: null, preferGaussian: false };
+            }
+
+            if (extension === 'fbx') {
                 return { root: asset, isPointCloud: false, gaussianRoot: null, preferGaussian: false };
             }
 
@@ -4606,10 +4608,11 @@
         function prepareExportRenderState(settings) {
             const width = settings.width;
             const height = settings.height;
-            settings.pointPixelScale = getPointExportPixelScale(height);
+            settings.pointPixelScale = 1.0;
             renderer.setPixelRatio(1);
             renderer.setSize(width, height);
             setPointPixelScale(settings.pointPixelScale);
+            updatePointViewportHeight(height);
             controls.enabled = false;
             controls.enableRotate = false;
             controls.enableZoom = false;
@@ -4681,6 +4684,7 @@
         }
 
         function renderExportFrame(frameInfo, settings) {
+            updatePointViewportHeight(renderer.domElement.height);
             pointMaterials.forEach(m => {
                 m.uniforms.uIsOrtho.value = 1.0;
                 m.uniforms.uOrthoZoom.value = 1.0;
