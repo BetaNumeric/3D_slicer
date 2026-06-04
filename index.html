@@ -457,19 +457,29 @@
             </div>
 
             <!-- Fixed Import Footer -->
-            <div id="import-footer" class="p-3 bg-black/50 border-t border-gray-800 space-y-2">
-                <button id="btn-export" class="w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
-                    <span id="export-button-label">Export Frames (.zip)</span>
-                </button>
-                <div class="grid grid-cols-[1fr_auto] gap-2">
-                    <label class="flex items-center justify-center min-w-0 cursor-pointer hover:bg-gray-800/60 transition px-3 py-2 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
+            <div id="import-footer" class="p-2 bg-black/50 border-t border-gray-800 space-y-1.5">
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="btn-export" class="min-w-0 w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2">
+                        <span id="export-button-label" class="truncate">Export ZIP</span>
+                    </button>
+                    <button type="button" id="btn-batch-export" class="min-w-0 px-2 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-900/70 border border-gray-700 rounded transition-all truncate" disabled>
+                        Batch Render
+                    </button>
+                </div>
+                <div class="grid grid-cols-[1fr_1fr_auto] gap-1.5">
+                    <label class="flex items-center justify-center min-w-0 cursor-pointer hover:bg-gray-800/60 transition px-2 py-1.5 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
                         <input type="file" id="file-input" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.splat,.sog" class="hidden"/>
-                        <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Load Model</span>
+                        <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Load</span>
                     </label>
-                    <button id="btn-reset" class="px-3 py-2 text-[10px] font-bold text-gray-500 hover:text-white bg-gray-900/70 border border-gray-700 hover:bg-gray-700 rounded transition-all">
+                    <label class="flex items-center justify-center min-w-0 cursor-pointer hover:bg-gray-800/60 transition px-2 py-1.5 rounded border border-dashed border-gray-700 hover:border-blue-500 group">
+                        <input type="file" id="folder-input" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.splat,.sog" webkitdirectory directory multiple class="hidden"/>
+                        <span class="text-[10px] font-bold text-gray-400 group-hover:text-blue-400 truncate">Folder</span>
+                    </label>
+                    <button id="btn-reset" class="px-2 py-1.5 text-[10px] font-bold text-gray-500 hover:text-white bg-gray-900/70 border border-gray-700 hover:bg-gray-700 rounded transition-all">
                         Reset
                     </button>
                 </div>
+                <div id="batch-status" class="hidden text-[10px] text-gray-500 font-mono truncate min-h-3"></div>
                 <div id="loading-status" class="text-[10px] text-amber-400 font-mono hidden flex items-center gap-2 min-h-3">
                     <svg id="loading-spinner" class="animate-spin h-3 w-3 text-amber-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                     <span id="status-text" class="truncate">Loading...</span>
@@ -499,6 +509,7 @@
     <script>
         // --- CONSTANTS ---
         const DEFAULT_MODEL = 'https://raw.githubusercontent.com/BetaNumeric/3dme/master/model/me.glb';
+        const SUPPORTED_IMPORT_EXTENSIONS = ['glb', 'gltf', 'fbx', 'obj', 'stl', 'ply', 'splat', 'sog'];
         const FRUSTUM_SIZE = 3.0;
         const MAX_POINTS = 12000000;
         const DEFAULT_POINT_SIZE = 4.0;
@@ -633,6 +644,10 @@
         let activeUploadUrl = null;
         let modelLoadId = 0;
         let currentModelBaseName = 'model';
+        let batchFiles = [];
+        let batchLoadedFile = null;
+        let isBatchRendering = false;
+        let batchCancelRequested = false;
         let infoRefreshToken = 0;
         let infoPanelOpen = false;
         let fpsFrameCount = 0;
@@ -3575,6 +3590,10 @@
             return match ? match[1] : 'glb';
         }
 
+        function isSupportedImportFile(file) {
+            return !!file && SUPPORTED_IMPORT_EXTENSIONS.includes(getImportExtension('', file.name));
+        }
+
         function getImportMode() {
             return 'auto';
         }
@@ -3906,7 +3925,7 @@
             applyWrapperTransform(wrapper, new THREE.Euler(), new THREE.Vector3());
         }
 
-        function finishModelLoad(status, statusText, spinner) {
+        function finishModelLoad(status, statusText, spinner, options = {}) {
             updateBounds();
             fitCropBoxToModel();
             controls.target.set(0, 0, 0);
@@ -3924,7 +3943,12 @@
             toggleOutlineMode(document.getElementById('outline-mode').checked);
             setRenderStyle(renderStyle);
             resetModelTransform();
-            fitDisplayFrameToModel({ silent: true, showFrame: false });
+            if (options.autoFitDisplay !== false) {
+                fitDisplayFrameToModel({ silent: true, showFrame: false });
+            } else {
+                setCaptureScale(captureScale);
+                syncSequencePreview();
+            }
             refreshSliceThicknessFromMode();
             updateFrameHelper();
             updateCropHelperVisibility();
@@ -4140,10 +4164,10 @@
             activeWrappers.gaussian = null;
         }
 
-        function installImportedRoot(root, isPointCloud, gaussianRoot, status, statusText, spinner) {
+        function installImportedRoot(root, isPointCloud, gaussianRoot, status, statusText, spinner, options = {}) {
             if (!root) {
                 setLoadingError(statusText, spinner, "Unsupported import.");
-                return;
+                return false;
             }
 
             root.updateMatrixWorld(true);
@@ -4152,7 +4176,7 @@
             if (rawBox.isEmpty()) {
                 disposeObject(root);
                 setLoadingError(statusText, spinner, "Warning: Empty model.");
-                return;
+                return false;
             }
 
             const size = rawBox.getSize(new THREE.Vector3());
@@ -4162,10 +4186,11 @@
             if (isPointCloud) installPointCloudRoot(root, rawBox, scale, gaussianRoot);
             else installMeshRoot(root, rawBox, scale);
 
-            finishModelLoad(status, statusText, spinner);
+            finishModelLoad(status, statusText, spinner, options);
+            return true;
         }
 
-        function loadModel(url, fileName = '') {
+        function loadModel(url, fileName = '', options = {}) {
             const loadId = ++modelLoadId;
             const extension = getImportExtension(url, fileName);
             const loader = createImportLoader(extension);
@@ -4181,40 +4206,155 @@
 
             if (!loader) {
                 setLoadingError(statusText, spinner, "Unsupported file type.");
+                return Promise.resolve(false);
+            }
+
+            return new Promise((resolve) => {
+                loader.load(url, (asset) => {
+                    if (loadId !== modelLoadId) {
+                        disposeLoadedAsset(asset, extension);
+                        resolve(false);
+                        return;
+                    }
+                    currentModelBaseName = getModelBaseName(url, fileName);
+                    setDisplayVolumeLocked(false, { sync: false });
+
+                    clearGroup(visualGroup);
+                    clearGroup(stencilGroup);
+                    clearGroup(pointGroup);
+                    clearGroup(gaussianGroup);
+
+                    pointMaterials = [];
+                    gaussianMaterials = [];
+                    activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
+                    meshSliceFillEntries = [];
+                    visualMeshClippingEnabled = true;
+                    cropBoxInitialized = false;
+
+                    const imported = normalizeImportedAsset(asset, extension, getImportMode());
+                    if (imported.preferGaussian && getImportMode() !== 'points') {
+                        renderStyle = 'gaussian';
+                    }
+                    const ok = installImportedRoot(imported.root, imported.isPointCloud, imported.gaussianRoot, status, statusText, spinner, options);
+                    resolve(ok);
+
+                }, undefined, (e) => {
+                    if (loadId !== modelLoadId) {
+                        resolve(false);
+                        return;
+                    }
+                    console.error(e);
+                    setLoadingError(statusText, spinner, "Error loading model.");
+                    resolve(false);
+                });
+            });
+        }
+
+        async function loadFileModel(file, options = {}) {
+            const url = URL.createObjectURL(file);
+            try {
+                return await loadModel(url, file.name, options);
+            } finally {
+                revokeBlobUrl(url);
+            }
+        }
+
+        function getFileDisplayName(file) {
+            return file?.webkitRelativePath || file?.name || 'model';
+        }
+
+        function updateBatchUi(message = '') {
+            const button = document.getElementById('btn-batch-export');
+            const status = document.getElementById('batch-status');
+            if (!button || !status) return;
+
+            const setBatchStatus = (text) => {
+                const value = text || '';
+                status.textContent = value;
+                status.classList.toggle('hidden', !value);
+            };
+
+            if (isBatchRendering) {
+                button.disabled = false;
+                button.textContent = batchCancelRequested ? 'Stopping...' : 'Stop Batch';
+                button.className = "min-w-0 px-2 py-1.5 text-[10px] font-bold text-white bg-amber-600 hover:bg-amber-500 border border-amber-500 rounded transition-all truncate";
+                setBatchStatus(message || `Batch rendering ${batchFiles.length} file${batchFiles.length === 1 ? '' : 's'}.`);
                 return;
             }
 
-            loader.load(url, (asset) => {
-                if (loadId !== modelLoadId) {
-                    disposeLoadedAsset(asset, extension);
-                    return;
-                }
-                currentModelBaseName = getModelBaseName(url, fileName);
-                setDisplayVolumeLocked(false, { sync: false });
+            const count = batchFiles.length;
+            button.disabled = isProcessingVideo || count === 0;
+            button.textContent = count > 0 ? `Batch Render (${count})` : 'Batch Render';
+            button.className = button.disabled
+                ? "min-w-0 px-2 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-900/70 border border-gray-700 rounded transition-all truncate"
+                : "min-w-0 px-2 py-1.5 text-[10px] font-bold text-blue-100 bg-blue-900/40 hover:bg-blue-800/70 border border-blue-800 rounded transition-all truncate";
+            setBatchStatus(message || (count > 0 ? `${count} batch file${count === 1 ? '' : 's'} ready.` : ''));
+        }
 
-                clearGroup(visualGroup);
-                clearGroup(stencilGroup);
-                clearGroup(pointGroup);
-                clearGroup(gaussianGroup);
+        function getBatchFiles(fileList) {
+            return Array.from(fileList || [])
+                .filter(isSupportedImportFile)
+                .sort((a, b) => getFileDisplayName(a).localeCompare(getFileDisplayName(b), undefined, { numeric: true, sensitivity: 'base' }));
+        }
 
-                pointMaterials = [];
-                gaussianMaterials = [];
-                activeWrappers = { visual: null, back: null, front: null, points: null, gaussian: null };
-                meshSliceFillEntries = [];
-                visualMeshClippingEnabled = true;
-                cropBoxInitialized = false;
+        async function selectBatchFolder(fileList) {
+            if (isProcessingVideo || isBatchRendering) return;
+            batchFiles = getBatchFiles(fileList);
+            batchLoadedFile = null;
+            batchCancelRequested = false;
+            revokeActiveUploadUrl();
 
-                const imported = normalizeImportedAsset(asset, extension, getImportMode());
-                if (imported.preferGaussian && getImportMode() !== 'points') {
-                    renderStyle = 'gaussian';
-                }
-                installImportedRoot(imported.root, imported.isPointCloud, imported.gaussianRoot, status, statusText, spinner);
+            if (batchFiles.length === 0) {
+                updateBatchUi('No supported 3D files found in that folder.');
+                return;
+            }
 
-            }, undefined, (e) => {
-                if (loadId !== modelLoadId) return;
-                console.error(e);
-                setLoadingError(statusText, spinner, "Error loading model.");
+            const first = batchFiles[0];
+            updateBatchUi(`Loading first batch model: ${getFileDisplayName(first)}`);
+            const ok = await loadFileModel(first, { autoFitDisplay: true });
+            if (ok) {
+                batchLoadedFile = first;
+                updateBatchUi(`${batchFiles.length} files ready. Adjust settings, then batch render.`);
+            } else {
+                updateBatchUi(`Could not load first model: ${getFileDisplayName(first)}`);
+            }
+        }
+
+        function captureModelTransformSettings() {
+            const settings = {};
+            ['x', 'y', 'z'].forEach((axis) => {
+                settings[`rot-${axis}`] = document.getElementById(`rot-${axis}`)?.value || '0';
+                settings[`num-rot-${axis}`] = document.getElementById(`num-rot-${axis}`)?.value || '0';
+                settings[`pos-model-${axis}`] = document.getElementById(`pos-model-${axis}`)?.value || '0';
+                settings[`num-pos-model-${axis}`] = document.getElementById(`num-pos-model-${axis}`)?.value || '0';
             });
+            settings['model-scale'] = document.getElementById('model-scale')?.value || '1';
+            settings['num-model-scale'] = document.getElementById('num-model-scale')?.value || settings['model-scale'];
+            settings['flip-model'] = !!document.getElementById('flip-model')?.checked;
+            return settings;
+        }
+
+        function applyModelTransformSettings(settings) {
+            if (!settings) return;
+            isSyncingModelControls = true;
+            try {
+                ['x', 'y', 'z'].forEach((axis) => {
+                    const rot = settings[`rot-${axis}`] ?? '0';
+                    const pos = settings[`pos-model-${axis}`] ?? '0';
+                    setModelControlValue(`rot-${axis}`, rot, true);
+                    setModelControlValue(`num-rot-${axis}`, settings[`num-rot-${axis}`] ?? rot, true);
+                    ensureModelPositionSliderRange(axis, finiteNumber(pos, 0));
+                    setModelControlValue(`pos-model-${axis}`, pos, true);
+                    setModelControlValue(`num-pos-model-${axis}`, settings[`num-pos-model-${axis}`] ?? pos, true);
+                });
+                const flip = document.getElementById('flip-model');
+                if (flip) flip.checked = !!settings['flip-model'];
+                modelScaleMultiplier = clamp(finiteNumber(settings['model-scale'], 1), 0.05, 5);
+                syncModelScaleControls(true);
+            } finally {
+                isSyncingModelControls = false;
+            }
+            updateOrientation();
         }
         
         function setPointDrawFraction(fraction) {
@@ -4497,24 +4637,31 @@
             const labelEl = document.getElementById('export-button-label');
             if (!button || !labelEl) return;
 
+            if (isBatchRendering) {
+                labelEl.textContent = batchCancelRequested ? 'Stopping Batch...' : 'Stop Batch';
+                button.className = "min-w-0 w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
+                button.disabled = false;
+                return;
+            }
+
             if (isProcessingVideo) {
                 labelEl.textContent = exportCancelRequested ? 'Stopping...' : 'Stop Render';
-                button.className = "w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
+                button.className = "min-w-0 w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
                 button.disabled = false;
                 return;
             }
 
             const format = document.getElementById('export-format').value;
-            const label = format === 'png-sequence' ? 'Export Frames (.zip)' : 'Offline Render (MP4)';
+            const label = format === 'png-sequence' ? 'Export ZIP' : 'Render MP4';
             labelEl.textContent = label;
-            button.className = "w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
+            button.className = "min-w-0 w-full py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded shadow transition-colors flex justify-center items-center gap-2";
             button.disabled = false;
         }
 
         function setExportUiLocked(locked) {
             const panel = document.getElementById('controls-panel');
             if (!panel) return;
-            const allowed = new Set(['btn-export', 'panel-close-btn']);
+            const allowed = new Set(['btn-export', 'btn-batch-export', 'panel-close-btn']);
 
             panel.querySelectorAll('input, select, button, textarea').forEach((el) => {
                 if (allowed.has(el.id)) return;
@@ -4537,6 +4684,7 @@
             if (content) content.classList.toggle('opacity-60', locked);
             if (!locked) syncDisplayLockUI();
             updateExportButtonLabel();
+            updateBatchUi();
         }
 
         function updateExportStatus(message) {
@@ -4545,10 +4693,12 @@
         }
 
         function requestExportCancel() {
-            if (!isProcessingVideo || exportCancelRequested) return;
-            exportCancelRequested = true;
-            updateExportStatus('Stopping after the current frame...');
+            if (!isProcessingVideo && !isBatchRendering) return;
+            if (isBatchRendering) batchCancelRequested = true;
+            if (isProcessingVideo) exportCancelRequested = true;
+            updateExportStatus(isBatchRendering ? 'Stopping batch...' : 'Stopping after the current frame...');
             updateExportButtonLabel();
+            updateBatchUi();
         }
 
         function getSequenceTravelRatio(sequence) {
@@ -4826,32 +4976,32 @@
         }
 
         // --- OFFLINE RENDERING LOGIC ---
-        async function startExport() {
+        async function startExport(options = {}) {
             if (isProcessingVideo) {
                 requestExportCancel();
-                return;
+                return false;
             }
             if (!activeWrappers.visual) {
                 alert("No model is loaded yet.");
-                return;
+                return false;
             }
 
             const settings = getExportSettings();
             if (settings.format === 'mp4' && typeof VideoEncoder === 'undefined') {
                 alert("Your browser does not support WebCodecs.");
-                return;
+                return false;
             }
 
             const maxTex = renderer.capabilities.maxTextureSize;
             if(settings.width > maxTex || settings.height > maxTex) {
                 alert(`Resolution too high. Maximum texture size is ${maxTex}px.`);
-                return;
+                return false;
             }
 
             const estimatedBytes = estimateExportBytes(settings);
-            if (estimatedBytes > EXPORT_LARGE_WARNING_BYTES) {
+            if (!options.skipLargeWarning && estimatedBytes > EXPORT_LARGE_WARNING_BYTES) {
                 const ok = confirm(`This export may use about ${formatBytes(estimatedBytes)} in memory before download. Continue?`);
-                if (!ok) return;
+                if (!ok) return false;
             }
 
             const wasFrameVisible = frameHelper.visible;
@@ -4885,7 +5035,7 @@
                 document.getElementById('rec-overlay').classList.remove('hidden');
                 const percentEl = document.getElementById('rec-percentage');
                 const barEl = document.getElementById('rec-progress-bar');
-                updateExportStatus('Offline rendering. Settings are locked.');
+                updateExportStatus(options.statusMessage || 'Offline rendering. Settings are locked.');
                 updateExportProgress(0, percentEl, barEl);
 
                 prepareExportRenderState(settings);
@@ -4911,12 +5061,103 @@
                 }
                 isProcessingVideo = false;
                 exportCancelRequested = false;
-                setExportUiLocked(false);
+                if (!isBatchRendering) setExportUiLocked(false);
                 setPointDrawFraction(previousPointDrawFraction);
                 refreshSliceThicknessFromMode();
                 setFullPointCloudVisible(showFullPointCloud);
                 updateCropHelperVisibility();
                 updateExportButtonLabel();
+            }
+            return completed;
+        }
+
+        async function startBatchRender() {
+            if (isBatchRendering || isProcessingVideo) {
+                requestExportCancel();
+                return;
+            }
+            if (batchFiles.length === 0) {
+                alert("Select a batch folder first.");
+                return;
+            }
+            if (!activeWrappers.visual) {
+                alert("Load the first batch model before starting the batch.");
+                return;
+            }
+
+            const sampleSettings = getExportSettings();
+            const maxTex = renderer.capabilities.maxTextureSize;
+            if (sampleSettings.width > maxTex || sampleSettings.height > maxTex) {
+                alert(`Resolution too high. Maximum texture size is ${maxTex}px.`);
+                return;
+            }
+            const estimatedBytes = estimateExportBytes(sampleSettings);
+            if (estimatedBytes > EXPORT_LARGE_WARNING_BYTES) {
+                const ok = confirm(`Each batch export may use about ${formatBytes(estimatedBytes)} in memory before download. Continue?`);
+                if (!ok) return;
+            }
+
+            const transformSettings = captureModelTransformSettings();
+            const lockedCaptureScale = captureScale;
+            let completedCount = 0;
+
+            isBatchRendering = true;
+            batchCancelRequested = false;
+            setAutoScanEnabled(false);
+            setExportUiLocked(true);
+            updateBatchUi(`Batch ready: ${batchFiles.length} files.`);
+            updateExportButtonLabel();
+
+            try {
+                for (let i = 0; i < batchFiles.length; i++) {
+                    if (batchCancelRequested) break;
+
+                    const file = batchFiles[i];
+                    const displayName = getFileDisplayName(file);
+                    const label = `Batch ${i + 1}/${batchFiles.length}: ${displayName}`;
+                    updateBatchUi(`${label} - loading`);
+                    updateExportStatus(`${label} - loading`);
+
+                    const canUseCurrentModel = i === 0 && batchLoadedFile === file && !!activeWrappers.visual;
+                    if (!canUseCurrentModel) {
+                        const ok = await loadFileModel(file, { autoFitDisplay: false });
+                        if (!ok) {
+                            updateBatchUi(`${label} - skipped load error`);
+                            await yieldToBrowser();
+                            continue;
+                        }
+                        batchLoadedFile = file;
+                        applyModelTransformSettings(transformSettings);
+                        setCaptureScale(lockedCaptureScale);
+                        refreshSliceThicknessFromMode();
+                    }
+
+                    if (batchCancelRequested) break;
+
+                    const completed = await startExport({
+                        skipLargeWarning: true,
+                        statusMessage: `${label} - rendering`
+                    });
+
+                    if (!completed) {
+                        if (batchCancelRequested) break;
+                        updateBatchUi(`${label} - stopped`);
+                        break;
+                    }
+
+                    completedCount++;
+                    updateBatchUi(`Downloaded ${completedCount}/${batchFiles.length}`);
+                    await yieldToBrowser();
+                }
+            } finally {
+                const canceled = batchCancelRequested;
+                isBatchRendering = false;
+                batchCancelRequested = false;
+                setExportUiLocked(false);
+                updateExportButtonLabel();
+                updateBatchUi(canceled
+                    ? `Batch stopped after ${completedCount}/${batchFiles.length}.`
+                    : `Batch complete: ${completedCount}/${batchFiles.length} downloaded.`);
             }
         }
 
@@ -5193,6 +5434,7 @@
             document.getElementById('btn-front-view').addEventListener('click', () => setOrthoPresetView('front'));
             document.getElementById('btn-side-view').addEventListener('click', () => setOrthoPresetView('side'));
             document.getElementById('btn-export').addEventListener('click', startExport);
+            document.getElementById('btn-batch-export').addEventListener('click', startBatchRender);
             document.getElementById('btn-cancel-export').addEventListener('click', requestExportCancel);
             document.getElementById('btn-info-refresh').addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -5217,6 +5459,9 @@
                 setDisplayVolumeLocked(e.target.checked);
             });
             document.getElementById('btn-reset').addEventListener('click', () => {
+                batchFiles = [];
+                batchLoadedFile = null;
+                updateBatchUi();
                 revokeActiveUploadUrl();
                 loadModel(DEFAULT_MODEL);
             });
@@ -5339,13 +5584,23 @@
             document.getElementById('file-input').addEventListener('change', (e) => {
                 if(e.target.files[0]) {
                     const file = e.target.files[0];
+                    batchFiles = [];
+                    batchLoadedFile = null;
+                    updateBatchUi();
                     revokeActiveUploadUrl();
                     activeUploadUrl = URL.createObjectURL(file);
                     loadModel(activeUploadUrl, file.name);
                     e.target.value = '';
                 }
             });
+            document.getElementById('folder-input').addEventListener('change', (e) => {
+                if (e.target.files?.length) {
+                    selectBatchFolder(e.target.files);
+                    e.target.value = '';
+                }
+            });
             updateExportButtonLabel();
+            updateBatchUi();
             updateSliceAxisUI();
             setPointSize(pointSize);
             setCaptureScale(captureScale);
