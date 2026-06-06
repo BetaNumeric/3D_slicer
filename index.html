@@ -385,6 +385,19 @@
                     </div>
 
                     <div class="space-y-2 pt-1 border-t border-gray-800">
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Batch Fit</label>
+                        <div class="grid grid-cols-[1fr_auto] gap-2">
+                            <select id="batch-fit-mode" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 outline-none">
+                                <option value="fixed" selected>Keep Scale</option>
+                                <option value="per-model">Fit Each</option>
+                            </select>
+                            <button type="button" id="btn-batch-fit-all" class="px-2 py-1 text-[10px] font-bold text-gray-500 bg-gray-900/70 border border-gray-700 rounded transition-all" disabled>
+                                Fit All
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-1 border-t border-gray-800">
                         <label class="text-[10px] text-gray-500 uppercase font-bold">Moving Display</label>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
@@ -683,6 +696,7 @@
         let batchFiles = [];
         let batchLoadedFile = null;
         let isBatchRendering = false;
+        let isBatchFitScanning = false;
         let batchCancelRequested = false;
         let infoRefreshToken = 0;
         let infoPanelOpen = false;
@@ -1210,29 +1224,24 @@
             };
         }
 
-        function fitDisplayFrameToModel(options = {}) {
-            const { silent = false, showFrame = true } = options;
-            const extents = getModelDisplayFitExtents();
+        function resolveDisplayFitScale(extents, display = getMovingDisplayInputs()) {
             if (!extents) {
-                if (!silent) alert("No model is loaded yet.");
-                return;
+                return { ok: false, message: 'No model is loaded yet.' };
             }
 
-            const display = getMovingDisplayInputs();
             const displayWidthCm = display.widthMm / 10;
             const displayHeightCm = display.heightMm / 10;
             const travelCm = display.travelMm / 10;
             if (travelCm <= 0 && extents.depthUnits > 0) {
-                if (!silent) alert("Travel must be greater than 0 mm to fit the model depth.");
-                return;
+                return { ok: false, message: 'Travel must be greater than 0 mm to fit the model depth.' };
             }
+
             const fullTravelFrames = Math.max(1, Math.round(display.fps * display.fullTravelDuration));
             const travelFramePitchCm = fullTravelFrames > 1 ? travelCm / (fullTravelFrames - 1) : travelCm;
             const requestedPaddingCm = (display.paddingBeforeFrames + display.paddingAfterFrames) * travelFramePitchCm;
             const availableDepthCm = travelCm - requestedPaddingCm;
             if (extents.depthUnits > 0 && availableDepthCm <= 0) {
-                if (!silent) alert("The requested lead/tail padding uses all available travel. Reduce padding frames or increase display travel.");
-                return;
+                return { ok: false, message: 'The requested lead/tail padding uses all available travel. Reduce padding frames or increase display travel.' };
             }
 
             const aspect = display.exportWidth / display.exportHeight;
@@ -1246,16 +1255,32 @@
                 extents.heightUnits * cmPerModelUnitAtScaleOne / displayHeightCm,
                 availableDepthCm > 0 ? extents.depthUnits * cmPerModelUnitAtScaleOne / availableDepthCm : FRAME_SCALE_MIN
             ) * DISPLAY_FIT_PADDING;
-            const nextScale = clamp(requiredScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX);
 
-            setCaptureScale(nextScale);
+            return {
+                ok: true,
+                requiredScale,
+                nextScale: clamp(requiredScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX)
+            };
+        }
+
+        function fitDisplayFrameToModel(options = {}) {
+            const { silent = false, showFrame = true } = options;
+            const extents = getModelDisplayFitExtents();
+            const fit = resolveDisplayFitScale(extents);
+            if (!fit.ok) {
+                if (!silent) alert(fit.message);
+                return false;
+            }
+
+            setCaptureScale(fit.nextScale);
             const checkbox = document.getElementById('show-frame');
             if (checkbox && showFrame) checkbox.checked = true;
             updateFrameHelper();
 
-            if (requiredScale > FRAME_SCALE_MAX && !silent) {
+            if (fit.requiredScale > FRAME_SCALE_MAX && !silent) {
                 alert("The model needs more than the maximum Frame Scale to fit inside the current display boundaries.");
             }
+            return fit;
         }
 
         function getActiveExportFrameCount(settings) {
@@ -4410,6 +4435,7 @@
 
         function updateBatchUi(message = '') {
             const button = document.getElementById('btn-batch-export');
+            const fitAllButton = document.getElementById('btn-batch-fit-all');
             const status = document.getElementById('batch-status');
             if (!button || !status) return;
 
@@ -4419,20 +4445,40 @@
                 status.classList.toggle('hidden', !value);
             };
 
+            const updateFitAllButton = (count, disabled, text = 'Fit All') => {
+                if (!fitAllButton) return;
+                fitAllButton.disabled = disabled;
+                fitAllButton.textContent = text;
+                fitAllButton.className = disabled
+                    ? "px-2 py-1 text-[10px] font-bold text-gray-500 bg-gray-900/70 border border-gray-700 rounded transition-all"
+                    : "px-2 py-1 text-[10px] font-bold text-blue-100 bg-blue-900/40 hover:bg-blue-800/70 border border-blue-800 rounded transition-all";
+            };
+
+            if (isBatchFitScanning) {
+                button.disabled = true;
+                button.textContent = 'Batch Render';
+                button.className = "min-w-0 px-2 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-900/70 border border-gray-700 rounded transition-all truncate";
+                updateFitAllButton(batchFiles.length, true, 'Scanning...');
+                setBatchStatus(message || `Scanning ${batchFiles.length} batch file${batchFiles.length === 1 ? '' : 's'}.`);
+                return;
+            }
+
             if (isBatchRendering) {
                 button.disabled = false;
                 button.textContent = batchCancelRequested ? 'Stopping...' : 'Stop Batch';
                 button.className = "min-w-0 px-2 py-1.5 text-[10px] font-bold text-white bg-amber-600 hover:bg-amber-500 border border-amber-500 rounded transition-all truncate";
+                updateFitAllButton(batchFiles.length, true);
                 setBatchStatus(message || `Batch rendering ${batchFiles.length} file${batchFiles.length === 1 ? '' : 's'}.`);
                 return;
             }
 
             const count = batchFiles.length;
-            button.disabled = isProcessingVideo || count === 0;
+            button.disabled = isProcessingVideo || isExportingPreviewImage || count === 0;
             button.textContent = count > 0 ? `Batch Render (${count})` : 'Batch Render';
             button.className = button.disabled
                 ? "min-w-0 px-2 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-900/70 border border-gray-700 rounded transition-all truncate"
                 : "min-w-0 px-2 py-1.5 text-[10px] font-bold text-blue-100 bg-blue-900/40 hover:bg-blue-800/70 border border-blue-800 rounded transition-all truncate";
+            updateFitAllButton(count, isProcessingVideo || isExportingPreviewImage || count === 0);
             setBatchStatus(message || (count > 0 ? `${count} batch file${count === 1 ? '' : 's'} ready.` : ''));
         }
 
@@ -4442,8 +4488,13 @@
                 .sort((a, b) => getFileDisplayName(a).localeCompare(getFileDisplayName(b), undefined, { numeric: true, sensitivity: 'base' }));
         }
 
+        function getBatchFitMode() {
+            const mode = document.getElementById('batch-fit-mode')?.value || 'fixed';
+            return mode === 'per-model' ? 'per-model' : 'fixed';
+        }
+
         async function selectBatchFolder(fileList) {
-            if (isProcessingVideo || isBatchRendering) return;
+            if (isProcessingVideo || isBatchRendering || isBatchFitScanning || isExportingPreviewImage) return;
             batchFiles = getBatchFiles(fileList);
             batchLoadedFile = null;
             batchCancelRequested = false;
@@ -4462,6 +4513,78 @@
                 updateBatchUi(`${batchFiles.length} files ready. Adjust settings, then batch render.`);
             } else {
                 updateBatchUi(`Could not load first model: ${getFileDisplayName(first)}`);
+            }
+        }
+
+        async function fitAllBatchModels() {
+            if (isProcessingVideo || isBatchRendering || isBatchFitScanning || isExportingPreviewImage) return;
+            if (batchFiles.length === 0) {
+                alert("Select a batch folder first.");
+                return;
+            }
+
+            const transformSettings = captureModelTransformSettings();
+            let maxRequiredScale = FRAME_SCALE_MIN;
+            let maxFileName = '';
+            let scannedCount = 0;
+            let failedCount = 0;
+            let finalMessage = '';
+
+            isBatchFitScanning = true;
+            setAutoScanEnabled(false);
+            setExportUiLocked(true);
+            updateBatchUi(`Scanning 0/${batchFiles.length}`);
+
+            try {
+                for (let i = 0; i < batchFiles.length; i++) {
+                    const file = batchFiles[i];
+                    const displayName = getFileDisplayName(file);
+                    updateBatchUi(`Fit scan ${i + 1}/${batchFiles.length}: ${displayName}`);
+
+                    const ok = await loadFileModel(file, { autoFitDisplay: false });
+                    if (!ok) {
+                        failedCount++;
+                        await yieldToBrowser();
+                        continue;
+                    }
+
+                    batchLoadedFile = file;
+                    applyModelTransformSettings(transformSettings);
+                    const fit = resolveDisplayFitScale(getModelDisplayFitExtents());
+                    if (fit.ok) {
+                        scannedCount++;
+                        if (fit.requiredScale > maxRequiredScale) {
+                            maxRequiredScale = fit.requiredScale;
+                            maxFileName = displayName;
+                        }
+                    } else {
+                        failedCount++;
+                    }
+                    await yieldToBrowser();
+                }
+
+                const fittedScale = clamp(maxRequiredScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX);
+                const first = batchFiles[0];
+                updateBatchUi(`Reloading first batch model: ${getFileDisplayName(first)}`);
+                const ok = await loadFileModel(first, { autoFitDisplay: false });
+                if (ok) {
+                    batchLoadedFile = first;
+                    applyModelTransformSettings(transformSettings);
+                    setCaptureScale(fittedScale);
+                    refreshSliceThicknessFromMode();
+                    const checkbox = document.getElementById('show-frame');
+                    if (checkbox) checkbox.checked = true;
+                    updateFrameHelper();
+                }
+
+                const overflowText = maxRequiredScale > FRAME_SCALE_MAX ? ' Max Frame Scale reached.' : '';
+                const failedText = failedCount > 0 ? ` ${failedCount} skipped.` : '';
+                const sourceText = maxFileName ? ` Largest: ${maxFileName}.` : '';
+                finalMessage = `Fit all complete: ${scannedCount}/${batchFiles.length}.${sourceText}${overflowText}${failedText}`;
+            } finally {
+                isBatchFitScanning = false;
+                setExportUiLocked(false);
+                updateBatchUi(finalMessage);
             }
         }
 
@@ -4888,6 +5011,10 @@
 
         function resolveExportRenderStyle(sliceMode) {
             const warnings = [];
+            const fallbackSurfaceStyle = () => activeWrappers.points
+                ? 'points'
+                : (activeWrappers.gaussian ? 'gaussian' : 'mesh');
+
             if (sliceMode === 'filled') {
                 if (activeWrappers.back && activeWrappers.front) return { renderStyle: 'mesh', warnings };
                 warnings.push('Filled mesh slices were requested, but this import has no mesh volume; exported surface slabs instead.');
@@ -4898,6 +5025,15 @@
                 if (activeWrappers.gaussian) return { renderStyle: 'gaussian', warnings };
                 warnings.push('Gaussian surface slabs were requested, but this import has no Gaussian splats; exported point slabs instead.');
                 return { renderStyle: 'points', warnings };
+            }
+            if (renderStyle === 'mesh' && (!activeWrappers.back || !activeWrappers.front)) {
+                return { renderStyle: fallbackSurfaceStyle(), warnings };
+            }
+            if (renderStyle === 'gaussian' && !activeWrappers.gaussian) {
+                return { renderStyle: fallbackSurfaceStyle(), warnings };
+            }
+            if (renderStyle === 'points' && !activeWrappers.points) {
+                return { renderStyle: fallbackSurfaceStyle(), warnings };
             }
             return { renderStyle, warnings };
         }
@@ -4948,7 +5084,7 @@
             const select = document.getElementById('preview-angle');
             const button = document.getElementById('btn-export-preview');
             const available = format === 'png-sequence';
-            const busy = isProcessingVideo || isBatchRendering || isExportingPreviewImage;
+            const busy = isProcessingVideo || isBatchRendering || isBatchFitScanning || isExportingPreviewImage;
 
             if (checkbox) {
                 checkbox.disabled = !available || busy;
@@ -5089,6 +5225,25 @@
             renderer.getContext().flush();
         }
 
+        function hasRenderableContent(root) {
+            let found = false;
+            root?.traverse((node) => {
+                if (found) return;
+                if (node.isMesh || node.isPoints || node.userData?.isGaussianSplatRenderer) found = true;
+            });
+            return found;
+        }
+
+        function resolvePreviewRenderStyle(settings) {
+            if (settings.renderStyle === 'mesh' && hasRenderableContent(visualGroup)) return 'mesh';
+            if (settings.renderStyle === 'gaussian' && activeWrappers.gaussian && hasRenderableContent(gaussianGroup)) return 'gaussian';
+            if (settings.renderStyle === 'points' && activeWrappers.points && hasRenderableContent(pointGroup)) return 'points';
+            if (activeWrappers.points && hasRenderableContent(pointGroup)) return 'points';
+            if (activeWrappers.gaussian && hasRenderableContent(gaussianGroup)) return 'gaussian';
+            if (hasRenderableContent(visualGroup)) return 'mesh';
+            return settings.renderStyle;
+        }
+
         function getPreviewViewBasis(mode) {
             const direction = new THREE.Vector3(0, 1, 0);
             const up = new THREE.Vector3(0, 0, -1);
@@ -5180,6 +5335,7 @@
                 visualMeshClippingEnabled
             };
             const previewCamera = createExportPreviewCamera(settings);
+            const previewRenderStyle = resolvePreviewRenderStyle(settings);
 
             try {
                 activeCamera = previewCamera;
@@ -5198,14 +5354,14 @@
                 });
 
                 setSliceWindowUniforms(false);
-                if (settings.renderStyle === 'mesh') {
+                if (previewRenderStyle === 'mesh') {
                     setVisualMeshClippingEnabled(false);
                     visualGroup.visible = true;
                     stencilGroup.visible = false;
                     capGroup.visible = false;
                     pointGroup.visible = false;
                     gaussianGroup.visible = false;
-                } else if (settings.renderStyle === 'gaussian') {
+                } else if (previewRenderStyle === 'gaussian') {
                     applyPointClippingPlanes(false);
                     visualGroup.visible = false;
                     stencilGroup.visible = false;
@@ -5233,7 +5389,7 @@
                 pointGroup.visible = previousState.pointVisible;
                 gaussianGroup.visible = previousState.gaussianVisible;
                 setVisualMeshClippingEnabled(previousState.visualMeshClippingEnabled);
-                if (settings.renderStyle !== 'mesh') applyPointClippingPlanes(true);
+                if (previewRenderStyle !== 'mesh') applyPointClippingPlanes(true);
             }
         }
 
@@ -5336,6 +5492,7 @@
 
         // --- OFFLINE RENDERING LOGIC ---
         async function startExport(options = {}) {
+            if (isBatchFitScanning || isExportingPreviewImage) return false;
             if (isProcessingVideo) {
                 requestExportCancel();
                 return false;
@@ -5422,7 +5579,7 @@
         }
 
         async function exportPreviewImage() {
-            if (isProcessingVideo || isBatchRendering || isExportingPreviewImage) return;
+            if (isProcessingVideo || isBatchRendering || isBatchFitScanning || isExportingPreviewImage) return;
             if (!activeWrappers.visual) {
                 alert("No model is loaded yet.");
                 return;
@@ -5472,6 +5629,7 @@
                 requestExportCancel();
                 return;
             }
+            if (isBatchFitScanning || isExportingPreviewImage) return;
             if (batchFiles.length === 0) {
                 alert("Select a batch folder first.");
                 return;
@@ -5495,6 +5653,7 @@
 
             const transformSettings = captureModelTransformSettings();
             const lockedCaptureScale = captureScale;
+            const batchFitMode = getBatchFitMode();
             let completedCount = 0;
 
             isBatchRendering = true;
@@ -5523,10 +5682,20 @@
                             continue;
                         }
                         batchLoadedFile = file;
-                        applyModelTransformSettings(transformSettings);
-                        setCaptureScale(lockedCaptureScale);
-                        refreshSliceThicknessFromMode();
                     }
+
+                    applyModelTransformSettings(transformSettings);
+                    if (batchFitMode === 'per-model') {
+                        const fit = fitDisplayFrameToModel({ silent: true, showFrame: false });
+                        if (!fit) {
+                            updateBatchUi(`${label} - skipped fit error`);
+                            await yieldToBrowser();
+                            continue;
+                        }
+                    } else {
+                        setCaptureScale(lockedCaptureScale);
+                    }
+                    refreshSliceThicknessFromMode();
 
                     if (batchCancelRequested) break;
 
@@ -5838,6 +6007,7 @@
             document.getElementById('btn-side-view').addEventListener('click', () => setOrthoPresetView('side'));
             document.getElementById('btn-export').addEventListener('click', startExport);
             document.getElementById('btn-batch-export').addEventListener('click', startBatchRender);
+            document.getElementById('btn-batch-fit-all').addEventListener('click', fitAllBatchModels);
             document.getElementById('btn-cancel-export').addEventListener('click', requestExportCancel);
             document.getElementById('btn-info-refresh').addEventListener('click', (e) => {
                 e.stopPropagation();
