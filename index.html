@@ -397,6 +397,16 @@
                                 <input type="number" id="display-offset-mm" value="0" step="0.1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
                             </div>
                         </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Lead Pad (frames)</label>
+                                <input type="number" id="padding-before-frames" value="1" min="0" max="120" step="1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Tail Pad (frames)</label>
+                                <input type="number" id="padding-after-frames" value="1" min="0" max="120" step="1" class="w-full bg-gray-700 text-white text-xs p-1 rounded border border-gray-600 focus:border-blue-500 outline-none">
+                            </div>
+                        </div>
                         <label class="flex items-center justify-between text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors bg-gray-800/40 border border-gray-700 rounded px-2 py-1.5">
                             <span>Lock Display Volume</span>
                             <input type="checkbox" id="lock-display-volume" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
@@ -531,6 +541,8 @@
         const DISPLAY_TRAVEL_MM = 480;
         const DISPLAY_OFFSET_MM = 0;
         const DISPLAY_FIT_PADDING = 1.01;
+        const DEFAULT_SEQUENCE_PADDING_FRAMES = 1;
+        const MAX_SEQUENCE_PADDING_FRAMES = 120;
         const CROP_MIN_SIZE = 0.01;
         const CROP_FIT_PADDING = 1.02;
         const EXPORT_LARGE_WARNING_BYTES = 1.5 * 1024 * 1024 * 1024;
@@ -573,7 +585,7 @@
         const slabPlaneBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
         let capMesh;
-        let frameHelper, displayVolumeHelper; 
+        let frameHelper, displayVolumeHelper, sequenceVolumeHelper, paddingBeforeHelper, paddingAfterHelper; 
         let cropBox, cropBoxFill, cropBoxEdges, cropTransformControls;
         let modelTransformProxy, modelTransformControls;
         let isAnimate = false;
@@ -715,6 +727,9 @@
             if (capMesh) capMesh.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.negative);
             if (frameHelper) frameHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
             if (displayVolumeHelper) displayVolumeHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
+            if (sequenceVolumeHelper) sequenceVolumeHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
+            if (paddingBeforeHelper) paddingBeforeHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
+            if (paddingAfterHelper) paddingAfterHelper.quaternion.setFromUnitVectors(PLANE_NORMAL, axis.vector);
         }
 
         function updateSliceAxisUI() {
@@ -820,12 +835,18 @@
         function getMovingDisplayInputs(width = null, height = null) {
             const exportWidth = Math.max(2, width || evenPositiveInteger(document.getElementById('export-w')?.value, 1920));
             const exportHeight = Math.max(2, height || evenPositiveInteger(document.getElementById('export-h')?.value, 1080));
+            const fps = clamp(finiteInteger(document.getElementById('export-fps')?.value, 30), 1, 120);
+            const fullTravelDuration = clamp(finiteInteger(document.getElementById('export-duration')?.value, 20), 1, 60);
             return {
                 widthMm: Math.max(1, finiteNumber(document.getElementById('display-width-mm')?.value, DISPLAY_WIDTH_MM)),
                 heightMm: Math.max(1, finiteNumber(document.getElementById('display-height-mm')?.value, DISPLAY_HEIGHT_MM)),
                 travelMm: Math.max(0, finiteNumber(document.getElementById('display-travel-mm')?.value, DISPLAY_TRAVEL_MM)),
                 offsetMm: finiteNumber(document.getElementById('display-offset-mm')?.value, DISPLAY_OFFSET_MM),
                 placement: document.getElementById('display-placement')?.value === 'bottom' ? 'bottom' : 'center',
+                paddingBeforeFrames: clamp(finiteInteger(document.getElementById('padding-before-frames')?.value, DEFAULT_SEQUENCE_PADDING_FRAMES), 0, MAX_SEQUENCE_PADDING_FRAMES),
+                paddingAfterFrames: clamp(finiteInteger(document.getElementById('padding-after-frames')?.value, DEFAULT_SEQUENCE_PADDING_FRAMES), 0, MAX_SEQUENCE_PADDING_FRAMES),
+                fps,
+                fullTravelDuration,
                 exportWidth,
                 exportHeight
             };
@@ -856,27 +877,60 @@
             const displayHeightUnits = (display.heightMm / 10) / cmPerModelUnit;
             const travelUnits = travelCm / cmPerModelUnit;
             const offsetUnits = (display.offsetMm / 10) / cmPerModelUnit;
+            const fullTravelFrames = Math.max(1, Math.round(display.fps * display.fullTravelDuration));
+            const travelFramePitchCm = fullTravelFrames > 1 ? travelCm / (fullTravelFrames - 1) : travelCm;
+            const requestedPaddingBeforeCm = display.paddingBeforeFrames * travelFramePitchCm;
+            const requestedPaddingAfterCm = display.paddingAfterFrames * travelFramePitchCm;
             const fullModelSpanUnits = Math.max(0, modelBounds.max - modelBounds.min);
             const fullModelHeightCm = fullModelSpanUnits * cmPerModelUnit;
-            const autoStartCm = display.placement === 'bottom' ? 0 : Math.max(0, (travelCm - fullModelHeightCm) / 2);
+            const requestedSequenceHeightCm = fullModelHeightCm + requestedPaddingBeforeCm + requestedPaddingAfterCm;
+            const autoSequenceStartCm = display.placement === 'bottom' ? 0 : Math.max(0, (travelCm - requestedSequenceHeightCm) / 2);
+            const autoStartCm = autoSequenceStartCm + requestedPaddingBeforeCm;
             const autoMinDepth = modelBounds.min - (autoStartCm / cmPerModelUnit) + offsetUnits;
             const minDepth = displayVolumeLocked && Number.isFinite(lockedDisplayVolumeMinDepth)
                 ? lockedDisplayVolumeMinDepth
                 : autoMinDepth;
             const maxDepth = minDepth + travelUnits;
 
-            let activeMinDepth = Math.max(modelBounds.min, minDepth);
-            let activeMaxDepth = Math.min(modelBounds.max, maxDepth);
-            if (activeMaxDepth < activeMinDepth) {
+            let contentMinDepth = Math.max(modelBounds.min, minDepth);
+            let contentMaxDepth = Math.min(modelBounds.max, maxDepth);
+            if (contentMaxDepth < contentMinDepth) {
                 const nearestDisplayEdge = modelBounds.min > maxDepth ? maxDepth : minDepth;
                 const clampedDepth = clamp(nearestDisplayEdge, modelBounds.min, modelBounds.max);
-                activeMinDepth = clampedDepth;
-                activeMaxDepth = clampedDepth;
+                contentMinDepth = clampedDepth;
+                contentMaxDepth = clampedDepth;
             }
 
+            const contentSpanUnits = Math.max(0, contentMaxDepth - contentMinDepth);
+            const contentStartCm = clamp((contentMinDepth - minDepth) * cmPerModelUnit, 0, Math.max(0, travelCm));
+            const contentHeightCm = Math.min(contentSpanUnits * cmPerModelUnit, Math.max(0, travelCm - contentStartCm));
+            const contentTravelRatio = travelCm <= 0
+                ? (contentHeightCm > 0 ? 1 : 0)
+                : clamp(contentHeightCm / travelCm, 0, 1);
+            const contentMinFrames = contentSpanUnits > 0 ? 2 : 1;
+            const contentFrameCount = contentTravelRatio <= 0
+                ? contentMinFrames
+                : Math.max(contentMinFrames, Math.round(fullTravelFrames * contentTravelRatio));
+            const fallbackPitchUnits = fullTravelFrames > 1 ? travelUnits / (fullTravelFrames - 1) : 0;
+            const framePitchUnits = contentFrameCount > 1 && contentSpanUnits > 0
+                ? contentSpanUnits / (contentFrameCount - 1)
+                : fallbackPitchUnits;
+
+            const availableBeforeUnits = Math.max(0, contentMinDepth - minDepth);
+            const availableAfterUnits = Math.max(0, maxDepth - contentMaxDepth);
+            const maxBeforeFrames = framePitchUnits > 0 ? Math.floor(availableBeforeUnits / framePitchUnits + 1e-6) : 0;
+            const maxAfterFrames = framePitchUnits > 0 ? Math.floor(availableAfterUnits / framePitchUnits + 1e-6) : 0;
+            const paddingBeforeFrames = Math.min(display.paddingBeforeFrames, maxBeforeFrames);
+            const paddingAfterFrames = Math.min(display.paddingAfterFrames, maxAfterFrames);
+            const paddingBeforeUnits = paddingBeforeFrames * framePitchUnits;
+            const paddingAfterUnits = paddingAfterFrames * framePitchUnits;
+
+            const activeMinDepth = contentMinDepth - paddingBeforeUnits;
+            const activeMaxDepth = contentMaxDepth + paddingAfterUnits;
             const activeSpanUnits = Math.max(0, activeMaxDepth - activeMinDepth);
             const activeStartCm = clamp((activeMinDepth - minDepth) * cmPerModelUnit, 0, Math.max(0, travelCm));
             const activeHeightCm = Math.min(activeSpanUnits * cmPerModelUnit, Math.max(0, travelCm - activeStartCm));
+            const frameCount = Math.max(1, contentFrameCount + paddingBeforeFrames + paddingAfterFrames);
 
             return {
                 cmPerModelUnit,
@@ -887,11 +941,26 @@
                 offsetUnits,
                 minDepth,
                 maxDepth,
+                contentMinDepth,
+                contentMaxDepth,
+                contentSpanUnits,
+                contentStartCm,
+                contentHeightCm,
+                contentFrameCount,
                 activeMinDepth,
                 activeMaxDepth,
                 activeSpanUnits,
                 activeStartCm,
-                activeHeightCm
+                activeHeightCm,
+                paddingBeforeFrames,
+                paddingAfterFrames,
+                requestedPaddingBeforeFrames: display.paddingBeforeFrames,
+                requestedPaddingAfterFrames: display.paddingAfterFrames,
+                paddingBeforeUnits,
+                paddingAfterUnits,
+                frameCount,
+                framePitchModelUnits: framePitchUnits,
+                framePitchCm: framePitchUnits * cmPerModelUnit
             };
         }
 
@@ -933,9 +1002,16 @@
                 offset_units: state.offsetUnits,
                 display_min_depth: state.minDepth,
                 display_max_depth: state.maxDepth,
+                content_min_depth: state.contentMinDepth,
+                content_max_depth: state.contentMaxDepth,
+                content_span_model_units: state.contentSpanUnits,
                 active_min_depth: state.activeMinDepth,
                 active_max_depth: state.activeMaxDepth,
-                active_span_model_units: state.activeSpanUnits
+                active_span_model_units: state.activeSpanUnits,
+                frame_count: state.frameCount,
+                frame_pitch_model_units: state.framePitchModelUnits,
+                padding_before_frames: state.paddingBeforeFrames,
+                padding_after_frames: state.paddingAfterFrames
             };
         }
 
@@ -962,7 +1038,17 @@
                 offsetUnits: state.offsetUnits,
                 minDepth: state.minDepth,
                 maxDepth: state.maxDepth,
-                centerDepth: state.minDepth + state.travelUnits / 2
+                centerDepth: state.minDepth + state.travelUnits / 2,
+                sequenceMinDepth: state.activeMinDepth,
+                sequenceMaxDepth: state.activeMaxDepth,
+                sequenceSpanUnits: state.activeSpanUnits,
+                sequenceCenterDepth: state.activeMinDepth + state.activeSpanUnits / 2,
+                contentMinDepth: state.contentMinDepth,
+                contentMaxDepth: state.contentMaxDepth,
+                paddingBeforeUnits: state.paddingBeforeUnits,
+                paddingAfterUnits: state.paddingAfterUnits,
+                paddingBeforeCenterDepth: state.activeMinDepth + state.paddingBeforeUnits / 2,
+                paddingAfterCenterDepth: state.contentMaxDepth + state.paddingAfterUnits / 2
             };
         }
 
@@ -1116,6 +1202,14 @@
                 if (!silent) alert("Travel must be greater than 0 mm to fit the model depth.");
                 return;
             }
+            const fullTravelFrames = Math.max(1, Math.round(display.fps * display.fullTravelDuration));
+            const travelFramePitchCm = fullTravelFrames > 1 ? travelCm / (fullTravelFrames - 1) : travelCm;
+            const requestedPaddingCm = (display.paddingBeforeFrames + display.paddingAfterFrames) * travelFramePitchCm;
+            const availableDepthCm = travelCm - requestedPaddingCm;
+            if (extents.depthUnits > 0 && availableDepthCm <= 0) {
+                if (!silent) alert("The requested lead/tail padding uses all available travel. Reduce padding frames or increase display travel.");
+                return;
+            }
 
             const aspect = display.exportWidth / display.exportHeight;
             const cmPerModelUnitAtScaleOne = Math.min(
@@ -1126,7 +1220,7 @@
                 FRAME_SCALE_MIN,
                 extents.widthUnits * cmPerModelUnitAtScaleOne / displayWidthCm,
                 extents.heightUnits * cmPerModelUnitAtScaleOne / displayHeightCm,
-                travelCm > 0 ? extents.depthUnits * cmPerModelUnitAtScaleOne / travelCm : FRAME_SCALE_MIN
+                availableDepthCm > 0 ? extents.depthUnits * cmPerModelUnitAtScaleOne / availableDepthCm : FRAME_SCALE_MIN
             ) * DISPLAY_FIT_PADDING;
             const nextScale = clamp(requiredScale, FRAME_SCALE_MIN, FRAME_SCALE_MAX);
 
@@ -1146,6 +1240,8 @@
         }
 
         function getPitchMatchedSliceThickness(settings) {
+            const sequencePitch = finiteNumber(settings?.sequence?.frame_pitch_model_units, 0);
+            if (sequencePitch > 0) return Math.max(SLICE_THICKNESS_MIN, sequencePitch);
             const span = Math.max(0, finiteNumber(settings?.sequence?.active_span_model_units, modelBounds.max - modelBounds.min));
             const activeFrames = getActiveExportFrameCount(settings);
             if (span <= 0) return SLICE_THICKNESS_MIN;
@@ -2465,6 +2561,29 @@
             displayVolumeHelper = new THREE.LineSegments(volumeGeo, volumeMat);
             displayVolumeHelper.visible = false;
             scene.add(displayVolumeHelper);
+            const sequenceVolumeMat = new THREE.LineBasicMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.75,
+                depthTest: false,
+                depthWrite: false
+            });
+            sequenceVolumeHelper = new THREE.LineSegments(volumeGeo, sequenceVolumeMat);
+            sequenceVolumeHelper.visible = false;
+            scene.add(sequenceVolumeHelper);
+            const paddingVolumeMat = new THREE.LineBasicMaterial({
+                color: 0x777777,
+                transparent: true,
+                opacity: 0.65,
+                depthTest: false,
+                depthWrite: false
+            });
+            paddingBeforeHelper = new THREE.LineSegments(volumeGeo, paddingVolumeMat);
+            paddingBeforeHelper.visible = false;
+            scene.add(paddingBeforeHelper);
+            paddingAfterHelper = new THREE.LineSegments(volumeGeo, paddingVolumeMat);
+            paddingAfterHelper.visible = false;
+            scene.add(paddingAfterHelper);
             createModelTransformHelper();
             createCropBoxHelper();
 
@@ -2642,6 +2761,9 @@
             capGroup.visible = true;     
             frameHelper.visible = false; 
             if (displayVolumeHelper) displayVolumeHelper.visible = false;
+            if (sequenceVolumeHelper) sequenceVolumeHelper.visible = false;
+            if (paddingBeforeHelper) paddingBeforeHelper.visible = false;
+            if (paddingAfterHelper) paddingAfterHelper.visible = false;
             pointGroup.visible = false; 
             gaussianGroup.visible = false;
 
@@ -2658,8 +2780,7 @@
             visualGroup.visible = visVisible; 
             stencilGroup.visible = false; 
             capGroup.visible = false;     
-            frameHelper.visible = document.getElementById('show-frame').checked && !isProcessingVideo;
-            if (displayVolumeHelper) displayVolumeHelper.visible = document.getElementById('show-frame').checked && !isProcessingVideo;
+            updateFrameHelper();
 
             renderer.clear();
             if(visVisible) {
@@ -4616,6 +4737,19 @@
             if (!frameHelper) return;
             const visible = document.getElementById('show-frame').checked && !isProcessingVideo;
             const metrics = getDisplayVolumeMetrics();
+            const setVolumeHelperBox = (helper, depthUnits, centerDepth, helperVisible = true) => {
+                if (!helper) return;
+                const hasDepth = depthUnits > 0.000001;
+                helper.scale.set(
+                    metrics.displayWidthUnits,
+                    metrics.displayHeightUnits,
+                    Math.max(0.000001, depthUnits)
+                );
+                helper.position.set(0, 0, 0);
+                setAxisComponent(helper.position, sliceAxis, centerDepth);
+                helper.visible = visible && helperVisible && hasDepth;
+            };
+
             frameHelper.scale.set(metrics.displayWidthUnits, metrics.displayHeightUnits, 1);
             setObjectSlicePosition(frameHelper, getOffsetSliceValue(document.getElementById('slice-slider').value));
             frameHelper.visible = visible;
@@ -4630,6 +4764,9 @@
                 setAxisComponent(displayVolumeHelper.position, sliceAxis, metrics.centerDepth);
                 displayVolumeHelper.visible = visible;
             }
+            setVolumeHelperBox(sequenceVolumeHelper, metrics.sequenceSpanUnits, metrics.sequenceCenterDepth);
+            setVolumeHelperBox(paddingBeforeHelper, metrics.paddingBeforeUnits, metrics.paddingBeforeCenterDepth);
+            setVolumeHelperBox(paddingAfterHelper, metrics.paddingAfterUnits, metrics.paddingAfterCenterDepth);
         }
 
         function updateExportButtonLabel() {
@@ -4712,6 +4849,7 @@
         }
 
         function getSequenceFrameCount(fps, fullTravelDuration, sequence, modelSpanUnits = 0) {
+            if (Number.isFinite(sequence?.frame_count)) return Math.max(1, Math.round(sequence.frame_count));
             const fullTravelFrames = Math.max(1, Math.round(fps * fullTravelDuration));
             const activeTravelRatio = getSequenceTravelRatio(sequence);
             const minFrames = modelSpanUnits > 0 ? 2 : 1;
@@ -4849,6 +4987,9 @@
 
             frameHelper.visible = false;
             if (displayVolumeHelper) displayVolumeHelper.visible = false;
+            if (sequenceVolumeHelper) sequenceVolumeHelper.visible = false;
+            if (paddingBeforeHelper) paddingBeforeHelper.visible = false;
+            if (paddingAfterHelper) paddingAfterHelper.visible = false;
             updateCropPlanes();
             if (cropBox) cropBox.visible = false;
             if (cropTransformControls) {
@@ -5328,8 +5469,8 @@
             controls.enableZoom = preExportState.controlsEnableZoom;
             controls.enablePan = preExportState.controlsEnablePan;
             setRenderStyle(renderStyle);
-            if(frameHelper) frameHelper.visible = restoreFrame;
-            if(displayVolumeHelper) displayVolumeHelper.visible = restoreFrame;
+            if (document.getElementById('show-frame')) document.getElementById('show-frame').checked = !!restoreFrame;
+            updateFrameHelper();
             if (typeof restoreMesh !== 'undefined' && renderStyle === 'mesh') {
                 visualGroup.visible = restoreMesh;
                 document.getElementById('show-mesh').checked = restoreMesh;
@@ -5449,11 +5590,15 @@
             const refreshAutoThickness = () => {
                 if (sliceThicknessMode === 'frame-pitch') refreshSliceThicknessFromMode();
             };
-            document.getElementById('export-duration').addEventListener('input', refreshAutoThickness);
-            document.getElementById('export-fps').addEventListener('change', refreshAutoThickness);
-            ['display-width-mm', 'display-height-mm', 'display-travel-mm', 'display-offset-mm', 'display-placement'].forEach((id) => {
-                document.getElementById(id).addEventListener('input', syncSequencePreview);
-                document.getElementById(id).addEventListener('change', syncSequencePreview);
+            const refreshSequenceTiming = () => {
+                syncSequencePreview();
+                refreshAutoThickness();
+            };
+            document.getElementById('export-duration').addEventListener('input', refreshSequenceTiming);
+            document.getElementById('export-fps').addEventListener('change', refreshSequenceTiming);
+            ['display-width-mm', 'display-height-mm', 'display-travel-mm', 'display-offset-mm', 'display-placement', 'padding-before-frames', 'padding-after-frames'].forEach((id) => {
+                document.getElementById(id).addEventListener('input', refreshSequenceTiming);
+                document.getElementById(id).addEventListener('change', refreshSequenceTiming);
             });
             document.getElementById('lock-display-volume').addEventListener('change', (e) => {
                 setDisplayVolumeLocked(e.target.checked);
@@ -5575,11 +5720,11 @@
             document.getElementById('show-frame').addEventListener('change', updateFrameHelper);
             document.getElementById('export-w').addEventListener('input', () => {
                 updateFrameHelper();
-                syncSequencePreview();
+                refreshSequenceTiming();
             });
             document.getElementById('export-h').addEventListener('input', () => {
                 updateFrameHelper();
-                syncSequencePreview();
+                refreshSequenceTiming();
             });
             document.getElementById('file-input').addEventListener('change', (e) => {
                 if(e.target.files[0]) {
