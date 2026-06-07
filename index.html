@@ -1054,7 +1054,7 @@
             const state = getDisplayVolumeState(display);
 
             return {
-                volume_height_cm: roundCm(state.activeHeightCm),
+                height_cm: roundCm(state.activeHeightCm),
                 start_cm: roundCm(state.activeStartCm),
                 display_offset_cm: roundCm(display.offsetMm / 10),
                 cm_per_model_unit: state.cmPerModelUnit,
@@ -1082,7 +1082,7 @@
             const display = getMovingDisplayInputs();
             const sequence = getSequenceInstructions(display);
             const range = syncSliceSliderRange(display);
-            volumeEl.value = sequence.volume_height_cm;
+            volumeEl.value = sequence.height_cm;
             startEl.value = sequence.start_cm;
             updateFrameHelper();
             if (clippingPlane && capMesh) updatePlaneHeight(range.value);
@@ -5029,7 +5029,7 @@
             const travelCm = Math.max(0, finiteNumber(sequence?.travel_cm, 0));
             const exactVolumeCm = Number.isFinite(sequence?.active_span_model_units) && Number.isFinite(sequence?.cm_per_model_unit)
                 ? sequence.active_span_model_units * sequence.cm_per_model_unit
-                : sequence?.volume_height_cm;
+                : sequence?.height_cm;
             const volumeCm = Math.max(0, finiteNumber(exactVolumeCm, 0));
             if (travelCm <= 0) return volumeCm > 0 ? 1 : 0;
             return clamp(volumeCm / travelCm, 0, 1);
@@ -5094,7 +5094,7 @@
             const effectiveSliceValueModelUnits = THREE.MathUtils.lerp(activeMinDepth, activeMaxDepth, progress);
             const sliceValueModelUnits = effectiveSliceValueModelUnits - offsetUnits;
             const physicalStartMm = (settings.sequence?.start_cm || 0) * 10;
-            const physicalVolumeMm = (settings.sequence?.volume_height_cm || 0) * 10;
+            const physicalVolumeMm = (settings.sequence?.height_cm || 0) * 10;
             return {
                 index,
                 timeSeconds,
@@ -5109,7 +5109,7 @@
         function sequenceJsonBlob(settings) {
             return new Blob([JSON.stringify({
                 start_cm: settings.sequence.start_cm,
-                height_cm: settings.sequence.volume_height_cm
+                height_cm: settings.sequence.height_cm
             }, null, 2)], { type: 'application/json' });
         }
 
@@ -5179,7 +5179,7 @@
             settings.activeDuration = settings.frameCount / settings.fps;
             settings.framePitchModelUnits = getPitchMatchedSliceThickness(settings);
             settings.sliceThicknessModelUnits = resolveSliceThicknessForSettings(settings);
-            if (settings.sequence.volume_height_cm > settings.sequence.travel_cm) {
+            if (settings.sequence.height_cm > settings.sequence.travel_cm) {
                 settings.warnings = settings.warnings.concat('The generated sequence volume is taller than the configured display travel; start_cm was clamped to 0.');
             }
             return settings;
