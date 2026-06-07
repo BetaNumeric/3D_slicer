@@ -172,8 +172,8 @@
                         </div>
                         <div>
                             <div class="flex justify-between">
-                                <label class="text-[10px] text-gray-500 uppercase font-bold">Preview Density</label>
-                                <span id="point-count-val" class="text-[10px] text-blue-400 font-mono">10%</span>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold">Preview Density (%)</label>
+                                <input type="number" id="point-count-val" min="1" max="100" step="1" value="10" class="w-14 bg-blue-900/20 text-blue-400 text-[10px] font-mono px-2 py-0.5 rounded border border-blue-900/30 outline-none text-right hover:border-blue-500 focus:border-blue-500 transition-colors">
                             </div>
                             <input type="range" id="point-count" min="0.01" max="1.0" step="0.01" value="0.10" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                         </div>
@@ -340,6 +340,16 @@
                             <option value="surface">Surface Slab Frames</option>
                             <option value="gaussian">Gaussian Surface Slabs</option>
                         </select>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">Export Density</label>
+                            <label class="flex items-center gap-2 text-[10px] font-bold text-gray-400 cursor-pointer hover:text-white transition-colors">
+                                <span>Use Preview</span>
+                                <input type="checkbox" id="export-density-preview" class="w-3 h-3 accent-blue-500 rounded bg-gray-700 border-gray-600">
+                            </label>
+                        </div>
                     </div>
 
                     <div>
@@ -749,12 +759,24 @@
             setAxisComponent(object.position, sliceAxis, value);
         }
 
-        function configureCameraForSliceAxis(camera) {
+        function configureCameraForSliceAxis(camera, target = null) {
             const axis = getSliceAxisDefinition();
-            camera.position.copy(axis.cameraPosition);
+            const viewTarget = target || new THREE.Vector3();
+            camera.position.copy(viewTarget).add(axis.cameraPosition);
             camera.up.copy(axis.cameraUp);
-            camera.lookAt(0, 0, 0);
+            camera.lookAt(viewTarget);
             camera.updateProjectionMatrix();
+        }
+
+        function sync2DMapCamera(target = null) {
+            if (!orthoCamera) return;
+            const viewTarget = target || new THREE.Vector3();
+            configureCameraForSliceAxis(orthoCamera, viewTarget);
+            if (controls) {
+                controls.object = orthoCamera;
+                controls.target.copy(viewTarget);
+                controls.update();
+            }
         }
 
         function configureSliceGeometry() {
@@ -4645,10 +4667,28 @@
             return pointDrawFraction;
         }
 
-        function updatePointDensity() {
-            const pct = setPointDrawFraction(document.getElementById('point-count').value);
-            document.getElementById('point-count-val').textContent = Math.round(pct * 100) + '%';
+        function getPreviewPointDensity() {
+            const slider = document.getElementById('point-count');
+            return clamp(finiteNumber(slider?.value, pointDrawFraction), 0.01, 1.0);
+        }
+
+        function setPreviewPointDensity(value) {
+            const pct = setPointDrawFraction(value);
+            const slider = document.getElementById('point-count');
+            const input = document.getElementById('point-count-val');
+            if (slider) slider.value = pct.toFixed(2);
+            if (input) input.value = Math.round(pct * 100);
             markInfoExactCountsStale();
+            return pct;
+        }
+
+        function updatePointDensity() {
+            setPreviewPointDensity(document.getElementById('point-count').value);
+        }
+
+        function getExportPointDensity() {
+            const usePreview = !!document.getElementById('export-density-preview')?.checked;
+            return usePreview ? getPreviewPointDensity() : EXPORT_POINT_DENSITY;
         }
 
         function applyPointClippingPlanes(useSlab) {
@@ -5129,6 +5169,7 @@
                 sliceThicknessMode: thicknessMode,
                 sliceFillMode,
                 exportBaseName: currentModelBaseName || 'model',
+                exportPointDensity: getExportPointDensity(),
                 includePreviewImage: document.getElementById('export-format').value === 'png-sequence' && !!document.getElementById('include-preview-image')?.checked,
                 previewAngle: getPreviewAngleMode(),
                 estimatedBitrate
@@ -5147,6 +5188,7 @@
         function prepareExportRenderState(settings) {
             const width = settings.width;
             const height = settings.height;
+            const exportPointDensity = clamp(finiteNumber(settings.exportPointDensity, EXPORT_POINT_DENSITY), 0.01, 1.0);
             settings.pointPixelScale = 1.0;
             renderer.setPixelRatio(1);
             renderer.setSize(width, height);
@@ -5205,7 +5247,7 @@
                 stencilGroup.visible = false;
                 capGroup.visible = false;
                 applyPointClippingPlanes(true);
-                setPointDrawFraction(EXPORT_POINT_DENSITY);
+                setPointDrawFraction(exportPointDensity);
             } else {
                 pointGroup.visible = true;
                 gaussianGroup.visible = false;
@@ -5213,7 +5255,7 @@
                 stencilGroup.visible = false;
                 capGroup.visible = false;
                 applyPointClippingPlanes(true);
-                setPointDrawFraction(EXPORT_POINT_DENSITY);
+                setPointDrawFraction(exportPointDensity);
             }
         }
 
@@ -6113,6 +6155,13 @@
             document.getElementById('point-count').addEventListener('input', (e) => {
                 updatePointDensity();
             });
+            document.getElementById('point-count-val').addEventListener('input', (e) => {
+                setPreviewPointDensity(finiteNumber(e.target.value, Math.round(pointDrawFraction * 100)) / 100);
+            });
+            document.getElementById('point-count-val').addEventListener('change', () => {
+                setPreviewPointDensity(pointDrawFraction);
+            });
+            document.getElementById('export-density-preview').checked = false;
             document.getElementById('slice-thickness-mode').addEventListener('change', () => {
                 refreshSliceThicknessFromMode();
             });
@@ -6225,9 +6274,11 @@
                 activeCamera.position.set(3, 2, 4);
                 activeCamera.lookAt(0,0,0);
                 controls.object = activeCamera;
+                controls.target.set(0, 0, 0);
                 controls.enabled = true;
                 controls.enableRotate = true;
                 controls.enableZoom = true;
+                controls.update();
                 
                 if (renderStyle === 'mesh') {
                     meshCheckbox.checked = true;
@@ -6240,9 +6291,7 @@
 
                 activeCamera = orthoCamera;
                 activeCamera.zoom = 1; 
-                configureCameraForSliceAxis(activeCamera);
-                activeCamera.updateProjectionMatrix();
-                controls.object = activeCamera;
+                sync2DMapCamera();
                 controls.enabled = true;
                 controls.enableRotate = false; 
                 controls.enableZoom = true;    
@@ -6344,7 +6393,7 @@
             orthoCamera.top = fH / 2;
             orthoCamera.bottom = -fH / 2;
             orthoCamera.updateProjectionMatrix();
-            if (viewMode === '2d') configureCameraForSliceAxis(orthoCamera);
+            if (viewMode === '2d') sync2DMapCamera(controls?.target.clone());
             if (orthoCamera3D) {
                 const h3d = orthoCamera3D.top - orthoCamera3D.bottom;
                 const w3d = h3d * aspect;
